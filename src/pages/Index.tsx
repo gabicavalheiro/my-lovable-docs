@@ -1,29 +1,20 @@
 import { Link } from "react-router-dom";
-import { BookOpen, Settings, FileText, Upload } from "lucide-react";
+import { BookOpen, FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Index() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="h-6 w-6 text-primary" />
           <span className="text-lg font-bold text-foreground">Docs</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link to="/docs">
-            <Button variant="ghost" size="sm">Documentação</Button>
-          </Link>
-          <Link to="/admin">
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-1" /> Admin
-            </Button>
-          </Link>
-        </div>
+        <Link to="/docs">
+          <Button variant="ghost" size="sm">Documentação</Button>
+        </Link>
       </header>
 
-      {/* Hero */}
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-2xl text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-secondary-foreground text-sm font-medium mb-6">
@@ -47,37 +38,15 @@ export default function Index() {
                 Ver Documentação
               </Button>
             </Link>
-            <Link to="/admin">
-              <Button variant="outline" size="lg" className="gap-2">
-                <Upload className="h-5 w-5" />
-                Gerenciar Conteúdo
-              </Button>
-            </Link>
           </div>
 
-          {/* Feature cards */}
           <div className="grid md:grid-cols-3 gap-4 mt-16">
             {[
-              {
-                icon: BookOpen,
-                title: "Módulos",
-                desc: "Organize por módulos e subpáginas hierárquicas",
-              },
-              {
-                icon: FileText,
-                title: "Markdown",
-                desc: "Escreva em Markdown com suporte completo a GFM",
-              },
-              {
-                icon: Upload,
-                title: "Importação",
-                desc: "Importe arquivos .md ou .html instantaneamente",
-              },
+              { icon: BookOpen, title: "Módulos", desc: "Organize por módulos e subpáginas hierárquicas" },
+              { icon: FileText, title: "Markdown", desc: "Escreva em Markdown com suporte completo a GFM" },
+              { icon: Upload, title: "Importação", desc: "Importe arquivos .md ou .html instantaneamente" },
             ].map((f, i) => (
-              <div
-                key={i}
-                className="border border-border rounded-lg p-5 text-left hover:border-primary/30 transition-colors"
-              >
+              <div key={i} className="border border-border rounded-lg p-5 text-left hover:border-primary/30 transition-colors">
                 <f.icon className="h-8 w-8 text-primary mb-3" />
                 <h3 className="font-semibold text-foreground mb-1">{f.title}</h3>
                 <p className="text-sm text-muted-foreground">{f.desc}</p>
