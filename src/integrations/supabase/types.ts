@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      doc_modules: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          order_index: number
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          order_index?: number
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          order_index?: number
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      doc_pages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          module_id: string
+          order_index: number
+          parent_page_id: string | null
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          module_id: string
+          order_index?: number
+          parent_page_id?: string | null
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          module_id?: string
+          order_index?: number
+          parent_page_id?: string | null
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_pages_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "doc_modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_pages_parent_page_id_fkey"
+            columns: ["parent_page_id"]
+            isOneToOne: false
+            referencedRelation: "doc_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
