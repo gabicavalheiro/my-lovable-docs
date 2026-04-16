@@ -27,18 +27,15 @@ export function DocTableOfContents({ content }: { content: string }) {
   if (headings.length === 0) return null;
 
   return (
-    <aside className="w-[240px] flex-shrink-0 hidden xl:block">
-      <div className="sticky top-6 pl-6 border-l border-border">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          Nesta página
-        </p>
-        <nav className="space-y-1">
+    <aside className="w-[220px] flex-shrink-0 hidden xl:block">
+      <div className="sticky top-20 py-6 pr-4">
+        <nav className="space-y-1 border-l border-border pl-4">
           {headings.map((h, i) => (
             <a
               key={i}
               href={`#${h.id}`}
               className={cn(
-                "block text-sm text-muted-foreground hover:text-foreground transition-colors leading-6",
+                "block text-sm text-muted-foreground hover:text-primary transition-colors leading-7",
                 h.level === 3 && "pl-3",
                 h.level === 4 && "pl-6"
               )}
