@@ -8,35 +8,25 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 10%;
-
     --card: 0 0% 100%;
     --card-foreground: 240 10% 10%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 10%;
-
     --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
-
     --secondary: 262 30% 96%;
     --secondary-foreground: 262 40% 30%;
-
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
-
     --accent: 262 30% 96%;
     --accent-foreground: 262 40% 30%;
-
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
     --border: 240 6% 90%;
     --input: 240 6% 90%;
     --ring: 262 83% 58%;
-
     --radius: 0.5rem;
 
-    /* Documentation-specific tokens */
     --doc-sidebar-bg: 240 5% 97%;
     --doc-sidebar-width: 280px;
     --doc-toc-width: 240px;
@@ -60,40 +50,42 @@
   }
 
   .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 95%;
-    --card: 240 10% 6%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 10% 6%;
-    --popover-foreground: 0 0% 95%;
+    --background: 252 14% 8%;
+    --foreground: 0 0% 93%;
+    --card: 252 14% 10%;
+    --card-foreground: 0 0% 93%;
+    --popover: 252 14% 10%;
+    --popover-foreground: 0 0% 93%;
     --primary: 262 83% 65%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 262 20% 15%;
-    --secondary-foreground: 262 20% 80%;
-    --muted: 240 5% 15%;
-    --muted-foreground: 240 4% 60%;
-    --accent: 262 20% 15%;
-    --accent-foreground: 262 20% 80%;
+    --secondary: 260 20% 16%;
+    --secondary-foreground: 260 30% 80%;
+    --muted: 252 10% 14%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 260 20% 16%;
+    --accent-foreground: 260 30% 80%;
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 5% 18%;
-    --input: 240 5% 18%;
+    --border: 252 10% 16%;
+    --input: 252 10% 16%;
     --ring: 262 83% 65%;
-    --doc-sidebar-bg: 240 10% 6%;
-    --doc-sidebar-active: 262 83% 65%;
-    --doc-sidebar-hover: 262 20% 15%;
-    --doc-callout-bg: 262 20% 10%;
+
+    --doc-sidebar-bg: 252 14% 6%;
+    --doc-sidebar-active: 262 60% 18%;
+    --doc-sidebar-hover: 252 10% 12%;
+    --doc-callout-bg: 262 20% 12%;
     --doc-callout-border: 262 30% 25%;
-    --doc-code-bg: 240 5% 12%;
-    --doc-table-header: 262 15% 12%;
-    --doc-table-border: 240 5% 18%;
-    --sidebar-background: 240 5.9% 10%;
+    --doc-code-bg: 252 12% 12%;
+    --doc-table-header: 252 12% 12%;
+    --doc-table-border: 252 10% 18%;
+
+    --sidebar-background: 252 14% 6%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary: 262 83% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent: 252 10% 12%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-border: 252 10% 16%;
     --sidebar-ring: 262 83% 65%;
   }
 }
@@ -115,10 +107,10 @@
   @apply text-3xl font-bold mt-8 mb-4 text-foreground;
 }
 .markdown-content h2 {
-  @apply text-2xl font-semibold mt-8 mb-3 text-foreground pb-2 border-b border-border;
+  @apply text-2xl font-semibold mt-10 mb-4 text-foreground pb-2 border-b border-border;
 }
 .markdown-content h3 {
-  @apply text-xl font-semibold mt-6 mb-2 text-foreground;
+  @apply text-xl font-semibold mt-6 mb-3 text-foreground;
 }
 .markdown-content h4 {
   @apply text-lg font-medium mt-4 mb-2 text-foreground;
@@ -161,7 +153,7 @@
   @apply w-full mb-4 border-collapse rounded-lg overflow-hidden;
 }
 .markdown-content th {
-  @apply text-left px-4 py-3 font-semibold text-sm;
+  @apply text-left px-4 py-3 font-semibold text-sm text-foreground;
   background: hsl(var(--doc-table-header));
   border-bottom: 1px solid hsl(var(--doc-table-border));
 }
@@ -174,4 +166,7 @@
 }
 .markdown-content hr {
   @apply my-8 border-border;
+}
+.markdown-content strong {
+  @apply text-foreground font-semibold;
 }

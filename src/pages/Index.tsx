@@ -6,18 +6,17 @@ export default function Index() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold text-foreground">Docs</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-lg font-bold text-emerald-400 tracking-tight">velo</span>
         </div>
         <Link to="/docs">
-          <Button variant="ghost" size="sm">Documentação</Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">Documentação</Button>
         </Link>
       </header>
 
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-2xl text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-secondary-foreground text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
             <BookOpen className="h-4 w-4" />
             Base de Conhecimento
           </div>
@@ -27,18 +26,16 @@ export default function Index() {
           </h1>
 
           <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-            Crie, organize e compartilhe sua documentação com uma interface limpa e profissional. 
+            Crie, organize e compartilhe sua documentação com uma interface limpa e profissional.
             Importe arquivos Markdown ou HTML e transforme-os em páginas bonitas automaticamente.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/docs">
-              <Button size="lg" className="gap-2">
-                <FileText className="h-5 w-5" />
-                Ver Documentação
-              </Button>
-            </Link>
-          </div>
+          <Link to="/docs">
+            <Button size="lg" className="gap-2">
+              <FileText className="h-5 w-5" />
+              Ver Documentação
+            </Button>
+          </Link>
 
           <div className="grid md:grid-cols-3 gap-4 mt-16">
             {[

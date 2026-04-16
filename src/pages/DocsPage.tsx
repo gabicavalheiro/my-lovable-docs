@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { DocSidebar } from "@/components/docs/DocSidebar";
+import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocTableOfContents } from "@/components/docs/DocTableOfContents";
 import { MarkdownRenderer } from "@/components/docs/MarkdownRenderer";
 import { usePageBySlug } from "@/hooks/useDocData";
@@ -10,10 +10,8 @@ export default function DocsPage() {
   const { data: page, isLoading } = usePageBySlug(moduleSlug, pageSlug);
 
   return (
-    <div className="flex min-h-screen">
-      <DocSidebar />
-
-      <main className="flex-1 flex justify-center">
+    <DocsLayout>
+      <main className="flex-1 flex justify-center min-w-0">
         <div className="w-full max-w-[720px] px-8 py-10">
           {isLoading ? (
             <div className="space-y-4">
@@ -40,6 +38,6 @@ export default function DocsPage() {
 
         {page && <DocTableOfContents content={page.content} />}
       </main>
-    </div>
+    </DocsLayout>
   );
 }
