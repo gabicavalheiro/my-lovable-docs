@@ -95,8 +95,19 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
+    min-height: 100vh;
   }
+}
+
+.dark body {
+  background: linear-gradient(180deg, hsl(252 14% 8%) 0%, hsl(262 30% 10%) 40%, hsl(262 40% 14%) 100%);
+  background-attachment: fixed;
+}
+
+:root:not(.dark) body {
+  background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(262 50% 97%) 40%, hsl(262 60% 94%) 100%);
+  background-attachment: fixed;
 }
 
 /* Markdown content styling */
