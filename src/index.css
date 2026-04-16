@@ -101,12 +101,22 @@
 }
 
 .dark body {
-  background: linear-gradient(180deg, hsl(252 14% 8%) 0%, hsl(262 30% 10%) 40%, hsl(262 40% 14%) 100%);
+  background: 
+    radial-gradient(circle at 0% 0%, hsl(262 60% 18%) 0%, transparent 50%),
+    radial-gradient(circle at 100% 0%, hsl(272 50% 15%) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, hsl(262 55% 16%) 0%, transparent 50%),
+    radial-gradient(circle at 0% 100%, hsl(252 45% 12%) 0%, transparent 50%),
+    hsl(252 14% 8%);
   background-attachment: fixed;
 }
 
 :root:not(.dark) body {
-  background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(262 50% 97%) 40%, hsl(262 60% 94%) 100%);
+  background: 
+    radial-gradient(circle at 0% 0%, hsl(262 70% 92%) 0%, transparent 50%),
+    radial-gradient(circle at 100% 0%, hsl(272 65% 94%) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, hsl(262 68% 93%) 0%, transparent 50%),
+    radial-gradient(circle at 0% 100%, hsl(252 60% 95%) 0%, transparent 50%),
+    hsl(0 0% 100%);
   background-attachment: fixed;
 }
 
