@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useMemo } from "react";
-import { useModules, useAllPages, type DocModule, type DocPage } from "@/hooks/useDocData";
+import { useModules, useAllPages, type DocPage } from "@/hooks/useDocData";
 import { cn } from "@/lib/utils";
 
 export function DocSidebar() {
@@ -23,7 +23,6 @@ export function DocSidebar() {
   const toggleModule = (id: string) =>
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  // Auto-expand active module
   const activeModule = modules?.find((m) => m.slug === moduleSlug);
   if (activeModule && expanded[activeModule.id] === undefined) {
     expanded[activeModule.id] = true;
@@ -38,30 +37,30 @@ export function DocSidebar() {
 
   return (
     <aside className="w-[260px] min-h-0 border-r border-border bg-doc-sidebar flex-shrink-0 flex flex-col overflow-y-auto">
-      <nav className="flex-1 py-3">
+      <nav className="flex-1 py-4 px-3">
         {modules?.map((mod) => {
           const isExpanded = expanded[mod.id] ?? false;
           const pages = pagesByModule[mod.id] || [];
           const { roots, children } = buildTree(pages);
 
           return (
-            <div key={mod.id} className="mb-0.5">
+            <div key={mod.id} className="mb-4">
+              {/* Título do módulo */}
               <button
                 onClick={() => toggleModule(mod.id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                )}
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/30"
               >
                 {isExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
+                  <ChevronDown className="h-3 w-3 flex-shrink-0" />
                 ) : (
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRight className="h-3 w-3 flex-shrink-0" />
                 )}
-                <span>{mod.title}</span>
+                <span className="truncate text-left">{mod.title}</span>
               </button>
 
-              {isExpanded && (
-                <div className="ml-2">
+              {/* Páginas do módulo */}
+              {isExpanded && roots.length > 0 && (
+                <div className="space-y-0.5">
                   {roots.map((page) => (
                     <PageLink
                       key={page.id}
@@ -71,6 +70,7 @@ export function DocSidebar() {
                       childPages={children(page.id)}
                       allChildren={children}
                       currentModuleSlug={moduleSlug}
+                      depth={0}
                     />
                   ))}
                 </div>
@@ -90,6 +90,7 @@ function PageLink({
   childPages,
   allChildren,
   currentModuleSlug,
+  depth,
 }: {
   page: DocPage;
   moduleSlug: string;
@@ -97,36 +98,56 @@ function PageLink({
   childPages: DocPage[];
   allChildren: (parentId: string) => DocPage[];
   currentModuleSlug?: string;
+  depth: number;
 }) {
   const isActive = moduleSlug === currentModuleSlug && page.slug === activePageSlug;
-  const [open, setOpen] = useState(isActive || childPages.some(c => c.slug === activePageSlug));
+  const [open, setOpen] = useState(
+    isActive || childPages.some((c) => c.slug === activePageSlug)
+  );
 
   return (
     <div>
-      <div className="flex items-center group">
-        {childPages.length > 0 && (
-          <button onClick={() => setOpen(!open)} className="p-1 text-muted-foreground hover:text-foreground">
+      <div className="flex items-center">
+        {/* Indentação por nível */}
+        {depth > 0 && (
+          <div
+            className="flex-shrink-0 border-l border-border"
+            style={{ width: 16, marginLeft: depth * 12 }}
+          />
+        )}
+
+        {/* Seta para filhos */}
+        {childPages.length > 0 ? (
+          <button
+            onClick={() => setOpen(!open)}
+            className="p-1 flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          >
             {open ? (
               <ChevronDown className="h-3 w-3" />
             ) : (
               <ChevronRight className="h-3 w-3" />
             )}
           </button>
+        ) : (
+          /* Espaçador para alinhar com itens que têm seta */
+          depth === 0 && <div className="w-5 flex-shrink-0" />
         )}
+
         <Link
           to={`/docs/${moduleSlug}/${page.slug}`}
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors flex-1",
+            "flex-1 px-2 py-1.5 text-sm rounded-md transition-colors truncate",
             isActive
-              ? "bg-primary/15 text-primary font-medium"
+              ? "bg-primary/20 text-primary font-medium"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
         >
-          <span className="truncate">{page.title}</span>
+          {page.title}
         </Link>
       </div>
+
       {open && childPages.length > 0 && (
-        <div className="ml-4 border-l border-border">
+        <div className="mt-0.5 space-y-0.5">
           {childPages.map((child) => (
             <PageLink
               key={child.id}
@@ -136,6 +157,7 @@ function PageLink({
               childPages={allChildren(child.id)}
               allChildren={allChildren}
               currentModuleSlug={currentModuleSlug}
+              depth={depth + 1}
             />
           ))}
         </div>
