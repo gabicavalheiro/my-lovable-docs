@@ -13,7 +13,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/_olev-9f3k2" replace />;
 
   return <>{children}</>;
 }

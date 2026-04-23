@@ -25,7 +25,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/docs" element={<DocsIndex />} />
             <Route path="/docs/:moduleSlug/:pageSlug" element={<DocsPage />} />
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/_olev-9f3k2" element={<LoginPage />} />
             <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
