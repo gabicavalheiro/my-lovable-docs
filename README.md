@@ -1,3 +1,4 @@
-# Welcome to your Lovable project
+# Velo — Central de Documentação
 
-TODO: Document your project here
+Plataforma de documentação interna do Velo com painel admin,
+importação de conteúdo e suporte a módulos e submódulos.
