@@ -4,6 +4,17 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ── Variáveis de brand ──────────────────────────────────────────────────────
+ * Gradiente roxo→laranja usado em toda a interface.
+ * Alterar aqui reflete em todos os componentes.
+ */
+:root {
+  --brand-from:     #5b21b6;
+  --brand-to:       #ff6b00;
+  --brand-gradient: linear-gradient(135deg, var(--brand-from) 0%, var(--brand-to) 100%);
+  --brand-shadow:   0 4px 20px rgba(91,33,182,0.25);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -12,14 +23,14 @@
     --card-foreground: 240 10% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 10%;
-    --primary: 262 83% 58%;
+    --primary: 262 83% 58%;        /* #5b21b6 — roxo brand */
     --primary-foreground: 0 0% 100%;
     --secondary: 262 30% 96%;
     --secondary-foreground: 262 40% 30%;
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
-    --accent: 262 30% 96%;
-    --accent-foreground: 262 40% 30%;
+    --accent: 25 100% 50%;         /* #ff6b00 — laranja brand */
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 240 6% 90%;
@@ -27,118 +38,151 @@
     --ring: 262 83% 58%;
     --radius: 0.5rem;
 
-    --doc-sidebar-bg: 240 5% 97%;
-    --doc-sidebar-width: 280px;
-    --doc-toc-width: 240px;
-    --doc-content-max: 720px;
+    --doc-sidebar-bg:     240 5% 97%;
+    --doc-sidebar-width:  280px;
+    --doc-toc-width:      240px;
+    --doc-content-max:    720px;
     --doc-sidebar-active: 262 83% 58%;
-    --doc-sidebar-hover: 262 30% 96%;
-    --doc-callout-bg: 262 30% 97%;
+    --doc-sidebar-hover:  262 30% 96%;
+    --doc-callout-bg:     262 30% 97%;
     --doc-callout-border: 262 40% 85%;
-    --doc-code-bg: 240 5% 96%;
-    --doc-table-header: 262 20% 97%;
-    --doc-table-border: 240 6% 90%;
+    --doc-code-bg:        240 5% 96%;
+    --doc-table-header:   262 20% 97%;
+    --doc-table-border:   240 6% 90%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 262 83% 58%;
+    --sidebar-background:           0 0% 98%;
+    --sidebar-foreground:           240 5.3% 26.1%;
+    --sidebar-primary:              262 83% 58%;
+    --sidebar-primary-foreground:   0 0% 100%;
+    --sidebar-accent:               240 4.8% 95.9%;
+    --sidebar-accent-foreground:    240 5.9% 10%;
+    --sidebar-border:               220 13% 91%;
+    --sidebar-ring:                 262 83% 58%;
   }
 
   .dark {
-    --background: 240 5% 8%;
-    --foreground: 0 0% 92%;
-    --card: 240 5% 10%;
-    --card-foreground: 0 0% 92%;
-    --popover: 240 5% 10%;
-    --popover-foreground: 0 0% 92%;
-    --primary: 262 70% 65%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 260 15% 16%;
-    --secondary-foreground: 260 25% 80%;
-    --muted: 240 5% 13%;
-    --muted-foreground: 240 4% 52%;
-    --accent: 260 15% 16%;
-    --accent-foreground: 260 25% 80%;
-    --destructive: 0 62% 30%;
+    --background:          240 5% 8%;
+    --foreground:          0 0% 92%;
+    --card:                240 5% 10%;
+    --card-foreground:     0 0% 92%;
+    --popover:             240 5% 10%;
+    --popover-foreground:  0 0% 92%;
+    --primary:             262 70% 65%;
+    --primary-foreground:  0 0% 100%;
+    --secondary:           260 15% 16%;
+    --secondary-foreground:260 25% 80%;
+    --muted:               240 5% 13%;
+    --muted-foreground:    240 4% 52%;
+    --accent:              25 100% 50%;
+    --accent-foreground:   0 0% 100%;
+    --destructive:         0 62% 30%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 5% 16%;
-    --input: 240 5% 16%;
-    --ring: 262 70% 65%;
+    --border:              240 5% 16%;
+    --input:               240 5% 16%;
+    --ring:                262 70% 65%;
 
-    --doc-sidebar-bg: 240 5% 6%;
+    --doc-sidebar-bg:     240 5% 6%;
     --doc-sidebar-active: 262 50% 20%;
-    --doc-sidebar-hover: 240 5% 11%;
-    --doc-callout-bg: 262 20% 12%;
+    --doc-sidebar-hover:  240 5% 11%;
+    --doc-callout-bg:     262 20% 12%;
     --doc-callout-border: 262 30% 25%;
-    --doc-code-bg: 240 6% 11%;
-    --doc-table-header: 240 6% 11%;
-    --doc-table-border: 240 5% 17%;
+    --doc-code-bg:        240 6% 11%;
+    --doc-table-header:   240 6% 11%;
+    --doc-table-border:   240 5% 17%;
 
-    --sidebar-background: 240 5% 6%;
-    --sidebar-foreground: 240 4.8% 90%;
-    --sidebar-primary: 262 70% 65%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 5% 11%;
-    --sidebar-accent-foreground: 240 4.8% 90%;
-    --sidebar-border: 240 5% 14%;
-    --sidebar-ring: 262 70% 65%;
+    --sidebar-background:           240 5% 6%;
+    --sidebar-foreground:           240 4.8% 90%;
+    --sidebar-primary:              262 70% 65%;
+    --sidebar-primary-foreground:   0 0% 100%;
+    --sidebar-accent:               240 5% 11%;
+    --sidebar-accent-foreground:    240 4.8% 90%;
+    --sidebar-border:               240 5% 14%;
+    --sidebar-ring:                 262 70% 65%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     min-height: 100vh;
   }
 }
 
-/* Markdown content styling */
-.markdown-content {
-  @apply leading-relaxed;
+/* ═══════════════════════════════════════════════════════════════════════════
+   Utilitários de brand — use estas classes em qualquer componente
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Fundo gradiente */
+.brand-gradient {
+  background: var(--brand-gradient);
 }
-.markdown-content h1 {
-  @apply text-3xl font-bold mt-8 mb-4 text-foreground;
+
+/* Texto gradiente */
+.brand-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.markdown-content h2 {
-  @apply text-2xl font-semibold mt-10 mb-4 text-foreground pb-2 border-b border-border;
+
+/* Borda gradiente */
+.brand-border {
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  position: relative;
 }
-.markdown-content h3 {
-  @apply text-xl font-semibold mt-6 mb-3 text-foreground;
+.brand-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: var(--brand-gradient);
+  z-index: -1;
 }
-.markdown-content h4 {
-  @apply text-lg font-medium mt-4 mb-2 text-foreground;
+
+/* Botão primário brand */
+.btn-brand {
+  background: var(--brand-gradient);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
 }
-.markdown-content p {
-  @apply mb-4 text-muted-foreground leading-7;
+.btn-brand:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: var(--brand-shadow);
 }
-.markdown-content ul {
-  @apply mb-4 pl-6 list-disc;
+
+/* Sidebar item ativo */
+.sidebar-active {
+  background: linear-gradient(90deg, rgba(91,33,182,0.12) 0%, rgba(255,107,0,0.08) 100%);
+  color: #5b21b6;
+  font-weight: 600;
+  border-left: 3px solid transparent;
+  border-image: var(--brand-gradient) 1;
 }
-.markdown-content ol {
-  @apply mb-4 pl-6 list-decimal;
-}
-.markdown-content li {
-  @apply mb-1 text-muted-foreground leading-7;
-}
-.markdown-content a {
-  @apply text-primary underline underline-offset-2 hover:opacity-80 transition-opacity;
-}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Markdown content
+   ═══════════════════════════════════════════════════════════════════════════ */
+.markdown-content { @apply leading-relaxed; }
+.markdown-content h1 { @apply text-3xl font-bold mt-8 mb-4 text-foreground; }
+.markdown-content h2 { @apply text-2xl font-semibold mt-10 mb-4 text-foreground pb-2 border-b border-border; }
+.markdown-content h3 { @apply text-xl font-semibold mt-6 mb-3 text-foreground; }
+.markdown-content h4 { @apply text-lg font-medium mt-4 mb-2 text-foreground; }
+.markdown-content p  { @apply mb-4 text-muted-foreground leading-7; }
+.markdown-content ul { @apply mb-4 pl-6 list-disc; }
+.markdown-content ol { @apply mb-4 pl-6 list-decimal; }
+.markdown-content li { @apply mb-1 text-muted-foreground leading-7; }
+.markdown-content a  { @apply text-primary underline underline-offset-2 hover:opacity-80 transition-opacity; }
 .markdown-content blockquote {
   @apply border-l-4 pl-4 py-2 my-4 rounded-r-md;
   border-color: hsl(var(--doc-callout-border));
   background: hsl(var(--doc-callout-bg));
 }
-.markdown-content blockquote p {
-  @apply mb-0;
-}
+.markdown-content blockquote p { @apply mb-0; }
 .markdown-content code:not(pre code) {
   @apply px-1.5 py-0.5 rounded text-sm font-mono;
   background: hsl(var(--doc-code-bg));
@@ -147,12 +191,8 @@
   @apply rounded-lg p-4 mb-4 overflow-x-auto text-sm;
   background: hsl(var(--doc-code-bg));
 }
-.markdown-content pre code {
-  @apply bg-transparent p-0;
-}
-.markdown-content table {
-  @apply w-full mb-4 border-collapse rounded-lg overflow-hidden;
-}
+.markdown-content pre code { @apply bg-transparent p-0; }
+.markdown-content table  { @apply w-full mb-4 border-collapse rounded-lg overflow-hidden; }
 .markdown-content th {
   @apply text-left px-4 py-3 font-semibold text-sm text-foreground;
   background: hsl(var(--doc-table-header));
@@ -162,12 +202,6 @@
   @apply px-4 py-3 text-sm text-muted-foreground;
   border-bottom: 1px solid hsl(var(--doc-table-border));
 }
-.markdown-content img {
-  @apply rounded-lg my-4 max-w-full shadow-sm border border-border;
-}
-.markdown-content hr {
-  @apply my-8 border-border;
-}
-.markdown-content strong {
-  @apply text-foreground font-semibold;
-}
+.markdown-content img    { @apply rounded-lg my-4 max-w-full shadow-sm border border-border; }
+.markdown-content hr     { @apply my-8 border-border; }
+.markdown-content strong { @apply text-foreground font-semibold; }

@@ -1,5 +1,6 @@
-import { useMemo, useEffect, useState } from "react";
+import { memo, useMemo, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { headingToId, stripMarkdownInline } from "@/lib/heading-utils";
 
 interface TocItem {
   id: string;
@@ -7,83 +8,71 @@ interface TocItem {
   level: number;
 }
 
-/**
- * IDÊNTICA à headingToId exportada pelo MarkdownRenderer.
- * As duas funções devem ser mantidas em sincronia.
- */
-function headingToId(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .trim();
+/* ─── Configuração do observer ───────────────────────────────────────────────── */
+const OBSERVER_OPTIONS: IntersectionObserverInit = {
+  rootMargin: "0px 0px -70% 0px",
+  threshold: 0,
+};
+
+/* ─── Extração dos headings do Markdown ──────────────────────────────────────── */
+function parseHeadings(content: string): TocItem[] {
+  const items: TocItem[] = [];
+  const regex = /^(#{1,4})\s+(.+)$/gm;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(content)) !== null) {
+    const level = match[1].length;
+    const raw = match[2].trim();
+    const text = stripMarkdownInline(raw);
+    const id = headingToId(text);
+    if (id) items.push({ id, text, level });
+  }
+
+  return items;
 }
 
-/**
- * Remove formatação Markdown inline do texto de um heading
- * para que o texto exibido no TOC fique limpo.
- */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "$1")   // **negrito**
-    .replace(/\*(.+?)\*/g, "$1")        // *itálico*
-    .replace(/__(.+?)__/g, "$1")        // __negrito__
-    .replace(/_(.+?)_/g, "$1")          // _itálico_
-    .replace(/`(.+?)`/g, "$1")          // `código`
-    .replace(/~~(.+?)~~/g, "$1")        // ~~tachado~~
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1") // [link](url)
-    .trim();
-}
-
-export function DocTableOfContents({ content }: { content: string }) {
+/* ─── Componente ─────────────────────────────────────────────────────────────── */
+export const DocTableOfContents = memo(function DocTableOfContents({
+  content,
+}: {
+  content: string;
+}) {
   const [activeId, setActiveId] = useState<string>("");
 
-  const headings = useMemo(() => {
-    const items: TocItem[] = [];
-    const regex = /^(#{1,4})\s+(.+)$/gm;
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-      const level = match[1].length;
-      const raw = match[2].trim();
-      const text = stripMarkdown(raw);   // texto limpo para exibir
-      const id = headingToId(text);       // ID gerado do texto já limpo
-      if (id) items.push({ id, text, level });
-    }
-    return items;
-  }, [content]);
+  const headings = useMemo(() => parseHeadings(content), [content]);
 
-  // Destaca o heading visível conforme o scroll
+  // Callback estável — não recria o observer quando activeId muda
+  const handleIntersect = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const visible = entries.filter((e) => e.isIntersecting);
+      if (visible.length > 0) setActiveId(visible[0].target.id);
+    },
+    [] // sem deps: setActiveId é estável
+  );
+
   useEffect(() => {
     if (headings.length === 0) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting);
-        if (visible.length > 0) setActiveId(visible[0].target.id);
-      },
-      { rootMargin: "0px 0px -70% 0px", threshold: 0 }
-    );
+    const observer = new IntersectionObserver(handleIntersect, OBSERVER_OPTIONS);
 
-    headings.forEach(({ id }) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
+    // Coleta todos os elementos de uma vez, evitando reflow por elemento
+    const elements = headings
+      .map(({ id }) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+
+    elements.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
-  }, [headings]);
+  }, [headings, handleIntersect]);
 
-  if (headings.length === 0) return null;
-
-  const scrollTo = (id: string) => {
+  const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
     setActiveId(id);
-  };
+  }, []);
+
+  if (headings.length === 0) return null;
 
   return (
     <aside className="w-[220px] flex-shrink-0 hidden lg:flex flex-col">
@@ -97,7 +86,10 @@ export function DocTableOfContents({ content }: { content: string }) {
             <a
               key={i}
               href={`#${h.id}`}
-              onClick={(e) => { e.preventDefault(); scrollTo(h.id); }}
+              onClick={(e) => {
+                e.preventDefault();
+                scrollTo(h.id);
+              }}
               title={h.text}
               className={cn(
                 "block text-sm transition-colors py-0.5 leading-6 truncate",
@@ -116,4 +108,4 @@ export function DocTableOfContents({ content }: { content: string }) {
       </div>
     </aside>
   );
-}
+});

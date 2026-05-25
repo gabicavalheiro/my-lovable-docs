@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import DocsIndex from "./pages/DocsIndex";
 import DocsPage from "./pages/DocsPage";
+import AcademiaIndex from "./pages/AcademiaIndex";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
@@ -22,12 +23,13 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/docs" element={<DocsIndex />} />
+            <Route path="/"                   element={<Index />} />
+            <Route path="/docs"               element={<DocsIndex />} />
             <Route path="/docs/:moduleSlug/:pageSlug" element={<DocsPage />} />
-            <Route path="/_olev-9f3k2" element={<LoginPage />} />
-            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
+            <Route path="/academia"           element={<AcademiaIndex />} />
+            <Route path="/_olev-9f3k2"        element={<LoginPage />} />
+            <Route path="/admin"              element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+            <Route path="*"                   element={<NotFound />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

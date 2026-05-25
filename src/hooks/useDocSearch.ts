@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useAllPages, useModules } from "@/hooks/useDocData";
+import { headingToId, stripMarkdownInline, nearestHeadingId } from "@/lib/heading-utils";
 
 export type ExcerptHit = {
   text: string;
-  anchor: string | null; // id do heading mais próximo acima
+  anchor: string | null;
 };
 
 export type SearchResult = {
@@ -19,57 +20,56 @@ export type SearchResult = {
   modSlug: string;
   parentTitle: string | null;
   titleMatch: boolean;
-  hits: ExcerptHit[]; // todos os trechos onde a palavra aparece
+  hits: ExcerptHit[];
   score: number;
 };
 
-/** Slug de heading igual ao gerado pelo MarkdownRenderer */
-function headingToId(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-");
-}
+/* ─── Extração de trechos relevantes ─────────────────────────────────────── */
+const EXCERPT_CONTEXT_BEFORE = 60;
+const EXCERPT_CONTEXT_AFTER = 140;
+const MAX_HITS_PER_PAGE = 5;
 
-/**
- * Encontra o heading mais próximo ACIMA do índice dado no conteúdo markdown.
- */
-function nearestHeadingId(content: string, idx: number): string | null {
-  const regex = /^#{1,4}\s+(.+)$/gm;
-  let lastId: string | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(content)) !== null) {
-    if (m.index > idx) break;
-    lastId = headingToId(m[1].trim());
-  }
-  return lastId;
-}
-
-/**
- * Extrai até `maxHits` trechos do conteúdo onde `q` aparece.
- */
-function extractHits(content: string, q: string, maxHits = 5): ExcerptHit[] {
+function extractHits(content: string, q: string): ExcerptHit[] {
   const lower = content.toLowerCase();
   const hits: ExcerptHit[] = [];
   let searchFrom = 0;
 
-  while (hits.length < maxHits) {
+  while (hits.length < MAX_HITS_PER_PAGE) {
     const idx = lower.indexOf(q, searchFrom);
     if (idx === -1) break;
 
-    const start = Math.max(0, idx - 60);
-    const end = Math.min(content.length, idx + 140);
-    const raw = content.slice(start, end).replace(/[#*`>\-_]/g, "").trim();
-    const text = (start > 0 ? "..." : "") + raw + (end < content.length ? "..." : "");
-    const anchor = nearestHeadingId(content, idx);
+    const start = Math.max(0, idx - EXCERPT_CONTEXT_BEFORE);
+    const end = Math.min(content.length, idx + EXCERPT_CONTEXT_AFTER);
 
-    hits.push({ text, anchor });
+    // Remove formatação Markdown para o trecho do resultado
+    const raw = content
+      .slice(start, end)
+      .replace(/[#*`>\-_~]/g, "")
+      .replace(/\[(.+?)\]\(.+?\)/g, "$1")
+      .trim();
+
+    const text =
+      (start > 0 ? "…" : "") + raw + (end < content.length ? "…" : "");
+
+    hits.push({ text, anchor: nearestHeadingId(content, idx) });
     searchFrom = idx + q.length;
   }
 
   return hits;
 }
 
+/* ─── Hook principal ─────────────────────────────────────────────────────── */
+/**
+ * Busca full-text client-side com scoring.
+ *
+ * Pontuação:
+ *   +4 match no título
+ *   +2 match no nome do módulo
+ *   +1 por cada trecho encontrado no conteúdo (até 5)
+ *
+ * NOTA DE PERFORMANCE: o caller deve fazer debounce antes de passar `query`
+ * (ex: useDebounce(query, 200)) para evitar recomputação a cada keystroke.
+ */
 export function useDocSearch(query: string): SearchResult[] {
   const { data: allPages } = useAllPages();
   const { data: modules } = useModules();
@@ -78,43 +78,61 @@ export function useDocSearch(query: string): SearchResult[] {
     const q = query.trim().toLowerCase();
     if (!allPages || !modules || q.length < 2) return [];
 
-    return allPages
-      .map((page) => {
-        const mod = modules.find((m) => m.id === page.module_id);
-        const parent = page.parent_page_id
-          ? allPages.find((p) => p.id === page.parent_page_id)
-          : null;
+    const moduleMap = new Map(modules.map((m) => [m.id, m]));
+    const pageMap = new Map(allPages.map((p) => [p.id, p]));
 
-        const titleMatch = page.title.toLowerCase().includes(q);
-        const hits = extractHits(page.content, q);
-        const inMod = (mod?.title ?? "").toLowerCase().includes(q);
+    const results: SearchResult[] = [];
 
-        if (!titleMatch && hits.length === 0 && !inMod) return null;
+    for (const page of allPages) {
+      const mod = moduleMap.get(page.module_id);
+      const parent = page.parent_page_id
+        ? pageMap.get(page.parent_page_id)
+        : undefined;
 
-        const score = (titleMatch ? 4 : 0) + (inMod ? 2 : 0) + hits.length;
+      const titleMatch = page.title.toLowerCase().includes(q);
+      const inMod = (mod?.title ?? "").toLowerCase().includes(q);
+      const hits = extractHits(page.content, q);
 
-        return {
-          page,
-          modTitle: mod?.title ?? "—",
-          modSlug: mod?.slug ?? "",
-          parentTitle: parent?.title ?? null,
-          titleMatch,
-          hits,
-          score,
-        } as SearchResult;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b!.score - a!.score) as SearchResult[];
+      if (!titleMatch && hits.length === 0 && !inMod) continue;
+
+      const score = (titleMatch ? 4 : 0) + (inMod ? 2 : 0) + hits.length;
+
+      results.push({
+        page,
+        modTitle: mod?.title ?? "—",
+        modSlug: mod?.slug ?? "",
+        parentTitle: parent?.title ?? null,
+        titleMatch,
+        hits,
+        score,
+      });
+    }
+
+    return results.sort((a, b) => b.score - a.score);
   }, [allPages, modules, query]);
 }
 
-/** Divide texto em partes para destacar a query */
-export function highlightMatch(text: string, query: string) {
+/* ─── Utilitário de highlight ────────────────────────────────────────────── */
+/**
+ * Divide um texto em partes com flag de highlight para o termo buscado.
+ * Use para renderizar resultados com a query destacada.
+ */
+export function highlightMatch(
+  text: string,
+  query: string
+): Array<{ text: string; hl: boolean }> {
   if (!query || query.trim().length < 2) return [{ text, hl: false }];
+
   const q = query.trim();
-  const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  // Escapa caracteres especiais de regex
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+
   return text.split(regex).map((part) => ({
     text: part,
     hl: part.toLowerCase() === q.toLowerCase(),
   }));
 }
+
+// Re-exporta para uso nos componentes de busca
+export { headingToId, stripMarkdownInline };

@@ -1,14 +1,45 @@
-import { Link, useParams } from "react-router-dom";
-import { ChevronDown, ChevronRight, FolderOpen } from "lucide-react";
+import { Link, useParams, useLocation } from "react-router-dom";
+import { ChevronDown, ChevronRight, FolderOpen, GraduationCap } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useModules, useAllPages, type DocModule, type DocPage } from "@/hooks/useDocData";
 import { cn } from "@/lib/utils";
 
+/* ── Link fixo de Academia no topo do sidebar ──────────────────────────────── */
+function AcademiaLink() {
+  const location = useLocation();
+  const isActive = location.pathname === "/academia";
+
+  return (
+    <Link
+      to="/academia"
+      className={cn(
+        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-semibold mb-1 transition-all",
+        isActive
+          ? "text-white shadow-sm"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+      )}
+      style={isActive ? { background: "var(--brand-gradient)" } : {}}
+    >
+      <GraduationCap className="h-4 w-4 flex-shrink-0" />
+      <span className="flex-1">Academia IA</span>
+      <span className={cn(
+        "text-[10px] font-bold px-1.5 py-0.5 rounded-full border",
+        isActive
+          ? "bg-white/20 text-white border-white/30"
+          : "bg-violet-100 text-violet-700 border-violet-200"
+      )}>
+        NOVO
+      </span>
+    </Link>
+  );
+}
+
+/* ── Sidebar principal ─────────────────────────────────────────────────────── */
 export function DocSidebar() {
   const { moduleSlug, pageSlug } = useParams();
-  const { data: modules } = useModules();
-  const { data: allPages } = useAllPages();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const { data: modules }        = useModules();
+  const { data: allPages }       = useAllPages();
+  const [expanded, setExpanded]  = useState<Record<string, boolean>>({});
 
   const pagesByModule = useMemo(() => {
     if (!allPages) return {} as Record<string, DocPage[]>;
@@ -20,7 +51,6 @@ export function DocSidebar() {
     return map;
   }, [allPages]);
 
-  // Separa módulos raiz dos submódulos
   const rootModules = useMemo(
     () => modules?.filter((m) => !m.parent_module_id) ?? [],
     [modules]
@@ -32,19 +62,17 @@ export function DocSidebar() {
   const toggle = (id: string) =>
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  // Expande automaticamente o módulo ativo (e seu pai se for submódulo)
+  // Expande automaticamente o módulo ativo
   const activeModule = modules?.find((m) => m.slug === moduleSlug);
   if (activeModule) {
-    if (expanded[activeModule.id] === undefined) {
-      expanded[activeModule.id] = true;
-    }
+    if (expanded[activeModule.id] === undefined) expanded[activeModule.id] = true;
     if (activeModule.parent_module_id && expanded[activeModule.parent_module_id] === undefined) {
       expanded[activeModule.parent_module_id] = true;
     }
   }
 
   const buildPageTree = (pages: DocPage[]) => {
-    const roots = pages.filter((p) => !p.parent_page_id);
+    const roots    = pages.filter((p) => !p.parent_page_id);
     const children = (parentId: string) => pages.filter((p) => p.parent_page_id === parentId);
     return { roots, children };
   };
@@ -52,6 +80,14 @@ export function DocSidebar() {
   return (
     <aside className="w-[260px] min-h-0 border-r border-border bg-doc-sidebar flex-shrink-0 flex flex-col overflow-y-auto">
       <nav className="flex-1 py-4 px-3">
+
+        {/* Link Academia — fixo no topo */}
+        <AcademiaLink />
+
+        {/* Separador */}
+        <div className="border-t border-border/50 mb-3 mt-2" />
+
+        {/* Módulos de documentação */}
         {rootModules.map((mod) => (
           <ModuleSection
             key={mod.id}
@@ -72,8 +108,7 @@ export function DocSidebar() {
   );
 }
 
-// ── Seção de um módulo (recursiva para submódulos) ────────────────────────────
-
+/* ── Seção de módulo (recursiva para submódulos) ───────────────────────────── */
 function ModuleSection({
   mod,
   subModules,
@@ -97,13 +132,11 @@ function ModuleSection({
   buildPageTree: (pages: DocPage[]) => { roots: DocPage[]; children: (id: string) => DocPage[] };
   depth: number;
 }) {
-  const isExpanded = expanded[mod.id] ?? false;
-  const pages = pagesByModule[mod.id] || [];
+  const isExpanded   = expanded[mod.id] ?? false;
+  const pages        = pagesByModule[mod.id] || [];
   const { roots, children } = buildPageTree(pages);
-  const hasContent = roots.length > 0 || subModules.length > 0;
+  const hasContent   = roots.length > 0 || subModules.length > 0;
   const isActiveModule = mod.slug === moduleSlug;
-
-  const indentPx = depth * 12;
 
   return (
     <div className={cn("mb-1", depth > 0 && "ml-2 border-l border-border/50 pl-2")}>
@@ -117,11 +150,10 @@ function ModuleSection({
             : "text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/20",
           isActiveModule && "text-primary"
         )}
-        style={{ paddingLeft: depth > 0 ? 8 : undefined }}
       >
         {hasContent ? (
           isExpanded
-            ? <ChevronDown className="h-3 w-3 flex-shrink-0" />
+            ? <ChevronDown  className="h-3 w-3 flex-shrink-0" />
             : <ChevronRight className="h-3 w-3 flex-shrink-0" />
         ) : (
           <FolderOpen className="h-3 w-3 flex-shrink-0 opacity-50" />
@@ -132,7 +164,7 @@ function ModuleSection({
       {/* Conteúdo expandido */}
       {isExpanded && (
         <div className="space-y-0.5 mb-2">
-          {/* Submódulos primeiro */}
+          {/* Submódulos */}
           {subModules.map((sub) => (
             <ModuleSection
               key={sub.id}
@@ -149,7 +181,7 @@ function ModuleSection({
             />
           ))}
 
-          {/* Páginas diretas do módulo */}
+          {/* Páginas do módulo */}
           {roots.map((page) => (
             <PageLink
               key={page.id}
@@ -169,8 +201,7 @@ function ModuleSection({
   );
 }
 
-// ── Link de página (recursivo para subpáginas) ────────────────────────────────
-
+/* ── Link de página (recursivo para subpáginas) ────────────────────────────── */
 function PageLink({
   page,
   moduleSlug,
@@ -210,10 +241,15 @@ function PageLink({
             onClick={() => setOpen(!open)}
             className="p-1 flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
           >
-            {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {open
+              ? <ChevronDown  className="h-3 w-3" />
+              : <ChevronRight className="h-3 w-3" />
+            }
           </button>
         ) : (
-          depth === 0 && <div className="w-5 flex-shrink-0" style={{ marginLeft: baseIndent }} />
+          depth === 0 && (
+            <div className="w-5 flex-shrink-0" style={{ marginLeft: baseIndent }} />
+          )
         )}
 
         <Link
@@ -221,7 +257,7 @@ function PageLink({
           className={cn(
             "flex-1 px-2 py-1.5 text-sm rounded-md transition-colors truncate",
             isActive
-              ? "bg-primary/20 text-primary font-medium"
+              ? "sidebar-active"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
         >

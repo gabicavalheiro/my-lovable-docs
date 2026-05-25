@@ -1,17 +1,16 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, LogIn } from "lucide-react";
+import { BookOpen, LogIn, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
-  const { signIn } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const { signIn }    = useAuth();
+  const navigate      = useNavigate();
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,54 +20,93 @@ export default function LoginPage() {
       await signIn(email, password);
       navigate("/admin");
     } catch (err: any) {
-      setError(err.message === "Invalid login credentials" ? "Email ou senha inválidos." : err.message);
+      setError(
+        err.message === "Invalid login credentials"
+          ? "Email ou senha inválidos."
+          : err.message
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{
+        background:
+          "radial-gradient(ellipse 80% 70% at 20% 20%, rgba(91,33,182,0.18) 0%, transparent 60%)," +
+          "radial-gradient(ellipse 60% 50% at 80% 80%, rgba(255,107,0,0.10) 0%, transparent 55%)," +
+          "hsl(var(--background))",
+      }}
+    >
       <div className="w-full max-w-sm">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <BookOpen className="h-8 w-8 text-primary" />
+          <div className="inline-flex items-center justify-center gap-2 mb-4">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: "var(--brand-gradient)" }}
+            >
+              <BookOpen className="h-5 w-5 text-white" />
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-foreground">Área administrativa</h1>
-          <p className="text-sm text-muted-foreground mt-1">Faça login para gerenciar a documentação</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Faça login para gerenciar a documentação
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="bg-destructive/10 text-destructive text-sm rounded-md px-4 py-3">
-              {error}
+        {/* Card */}
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-destructive/10 text-destructive text-sm rounded-md px-4 py-3">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@exemplo.com"
+                required
+              />
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@exemplo.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Senha</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            <LogIn className="h-4 w-4 mr-2" />
-            {loading ? "Entrando..." : "Entrar"}
-          </Button>
-        </form>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Senha</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            {/* Botão com gradiente */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:translate-y-0"
+              style={{ background: "var(--brand-gradient)" }}
+            >
+              {loading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Entrando...</>
+              ) : (
+                <><LogIn className="h-4 w-4" /> Entrar</>
+              )}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          © {new Date().getFullYear()} Velo · Documentação oficial
+        </p>
       </div>
     </div>
   );

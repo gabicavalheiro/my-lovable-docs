@@ -20,6 +20,9 @@ import {
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { MarkdownEditor } from "@/components/docs/MarkdownEditor";
+import { AcademiaGeneratorButton } from "@/components/docs/AcademiaGeneratorButton";
+import { DiagnosticGeneratorButton } from "@/components/docs/DiagnosticGeneratorButton";
+import { geminiGenerateTags, geminiPageToMarkdown } from "@/lib/gemini";
 
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
@@ -106,11 +109,41 @@ function TagInput({ tags, onChange, onAutoTag, loadingAutoTag }: {
   );
 }
 
-// ─── Tipo de módulo com parent ────────────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type DocModuleWithParent = DocModule & { parent_module_id?: string | null };
-
 type Tab = "modules" | "pages" | "import";
+
+// ─── Loaders dinâmicos ────────────────────────────────────────────────────────
+
+const loadJSZip = async (): Promise<any> => {
+  if ((window as any).JSZip) return (window as any).JSZip;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+    s.onload = () => resolve((window as any).JSZip);
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+};
+
+const loadPdfJs = async (): Promise<any> => {
+  if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js";
+    s.onload = () => {
+      const lib = (window as any).pdfjsLib;
+      lib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+      resolve(lib);
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+};
+
+// ─── AdminPage ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const { data: modulesRaw } = useModules();
@@ -137,48 +170,34 @@ export default function AdminPage() {
   const [importContent, setImportContent] = useState("");
   const [importTitle, setImportTitle] = useState("");
   const [importTags, setImportTags] = useState<string[]>([]);
-  const [anthropicKey, setAnthropicKey] = useState(() => localStorage.getItem("anthropic_key") ?? "");
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_key") ?? localStorage.getItem("anthropic_key") ?? "");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
 
-  // Árvore de módulos
+  // ── Derivados ──────────────────────────────────────────────────────────────
+
   const rootModules = useMemo(() => modules?.filter((m) => !m.parent_module_id) ?? [], [modules]);
   const subModulesOf = (parentId: string) => modules?.filter((m) => m.parent_module_id === parentId) ?? [];
   const toggleModuleExpand = (id: string) => setExpandedModules((p) => ({ ...p, [id]: !p[id] }));
 
-  // Todos os módulos em ordem flat para selects (com prefixo de nível)
   const allModulesFlat = useMemo(() => {
     const result: { mod: DocModuleWithParent; label: string }[] = [];
     const walk = (parentId: string | null, prefix: string) => {
       const group = modules?.filter((m) => (m.parent_module_id ?? null) === parentId) ?? [];
-      group.forEach((m) => {
-        result.push({ mod: m, label: `${prefix}${m.title}` });
-        walk(m.id, `${prefix}  `);
-      });
+      group.forEach((m) => { result.push({ mod: m, label: `${prefix}${m.title}` }); walk(m.id, `${prefix}  `); });
     };
     walk(null, "");
     return result;
   }, [modules]);
 
-  // ── Auto-tag ────────────────────────────────────────────────────────────
+  const filteredPages = allPages?.filter((p) => selectedModuleFilter === "all" || p.module_id === selectedModuleFilter);
+  const getModuleName = (id: string) => modules?.find((m) => m.id === id)?.title || "—";
+  const getModuleSlug = (id: string) => modules?.find((m) => m.id === id)?.slug || "";
+
+  // ── Gemini helpers ─────────────────────────────────────────────────────────
 
   const generateTags = async (title: string, content: string): Promise<string[]> => {
-    if (!anthropicKey) return [];
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514", max_tokens: 200,
-          messages: [{ role: "user", content: `Analise este conteúdo de documentação ERP/PDV e retorne 3-8 tags relevantes.\n\nREGRAS: português, minúsculas, sem acentos, hífen para palavras compostas. Ex: "nota-fiscal", "pdv", "entrada-estoque".\n\nRetorne APENAS JSON array. Ex: ["nota-fiscal","pdv"]\n\nTítulo: ${title}\nConteúdo: ${content.slice(0, 3000)}` }],
-        }),
-      });
-      const data = await res.json();
-      const text = (data.content?.[0]?.text ?? "[]").replace(/```json?|```/g, "").trim();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) return parsed.map((t: any) => String(t).toLowerCase().trim()).filter(Boolean);
-    } catch { }
-    return [];
+    return geminiGenerateTags(title, content, geminiKey);
   };
 
   const handleAutoTagEditor = async () => {
@@ -191,53 +210,99 @@ export default function AdminPage() {
       } else {
         toast({ title: "Sem API key", description: "Preencha a Chave da API Anthropic na aba Importar.", variant: "destructive" });
       }
-    } finally { setLoadingAutoTag(false); }
+    } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
+    finally { setLoadingAutoTag(false); }
   };
 
-  // ── Loaders CDN ──────────────────────────────────────────────────────────
-
-  const loadPdfJs = (): Promise<any> => new Promise((resolve, reject) => {
-    if ((window as any).pdfjsLib) return resolve((window as any).pdfjsLib);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-    s.onload = () => { const lib = (window as any).pdfjsLib; lib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; resolve(lib); };
-    s.onerror = reject; document.head.appendChild(s);
-  });
-
-  const loadJSZip = (): Promise<any> => new Promise((resolve, reject) => {
-    if ((window as any).JSZip) return resolve((window as any).JSZip);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
-    s.onload = () => resolve((window as any).JSZip); s.onerror = reject; document.head.appendChild(s);
-  });
-
-  // ── Upload helpers ───────────────────────────────────────────────────────
+  // ── Storage helpers ────────────────────────────────────────────────────────
 
   const uploadBlob = async (blob: Blob, ext: string): Promise<string> => {
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from("docs-images").upload(path, blob, { upsert: false, contentType: blob.type || MIME_MAP[ext] || "image/png" });
+    const path = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const { error } = await supabase.storage.from("docs-images").upload(path, blob, { upsert: false, contentType: blob.type });
     if (error) throw error;
-    return supabase.storage.from("docs-images").getPublicUrl(path).data.publicUrl;
+    const { data } = supabase.storage.from("docs-images").getPublicUrl(path);
+    return data.publicUrl;
   };
 
   const uploadBase64 = async (dataUrl: string): Promise<string> => {
-    const [header, b64] = dataUrl.split(",");
+    const [header] = dataUrl.split(",");
     const mime = header.match(/:(.*?);/)?.[1] ?? "image/png";
-    const ext = mime.split("/")[1].replace("jpeg", "jpg") ?? "png";
-    return uploadBlob(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: mime }), ext);
+    const ext = mime.split("/")[1].replace("jpeg", "jpg");
+    const blob = await fetch(dataUrl).then((r) => r.blob());
+    return uploadBlob(blob, ext);
   };
 
   const processInlineBase64 = async (md: string): Promise<string> => {
-    const matches = [...md.matchAll(/!\[([^\]]*)\]\((data:image\/[^)]+)\)/g)];
-    if (!matches.length) return md;
+    const regex = /!\[([^\]]*)\]\((data:[^)]+)\)/g;
     let result = md;
-    for (let i = 0; i < matches.length; i++) {
-      const [full, alt, dataUrl] = matches[i];
-      setImportProgress(`Enviando imagem inline ${i + 1}/${matches.length}...`);
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(md)) !== null) {
+      const [full, alt, dataUrl] = match;
       try { result = result.replace(full, `![${alt}](${await uploadBase64(dataUrl)})`); } catch { }
     }
     return result;
   };
+
+  // ── PDF helpers ────────────────────────────────────────────────────────────
+
+  const renderPageToBase64 = async (page: any): Promise<string> => {
+    const vp = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext("2d")!, viewport: vp }).promise;
+    return canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+  };
+
+  const extractPageEmbeddedImages = async (page: any): Promise<string[]> => {
+    const pdfjsLib = (window as any).pdfjsLib;
+    const ops = await page.getOperatorList();
+    const urls: string[] = []; const seen = new Set<string>();
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] !== pdfjsLib.OPS.paintImageXObject) continue;
+      const name: string = ops.argsArray[i][0]; if (seen.has(name)) continue; seen.add(name);
+      try {
+        const imgData: any = await new Promise((res) => page.objs.get(name, res));
+        if (!imgData?.data) continue;
+        const canvas = document.createElement("canvas");
+        canvas.width = imgData.width; canvas.height = imgData.height;
+        const ctx = canvas.getContext("2d")!;
+        const rgba = new Uint8ClampedArray(imgData.width * imgData.height * 4);
+        const src = imgData.data;
+        if (src.length === imgData.width * imgData.height * 4) { rgba.set(src); }
+        else { for (let p = 0; p < imgData.width * imgData.height; p++) { rgba[p*4]=src[p*3]; rgba[p*4+1]=src[p*3+1]; rgba[p*4+2]=src[p*3+2]; rgba[p*4+3]=255; } }
+        ctx.putImageData(new ImageData(rgba, imgData.width, imgData.height), 0, 0);
+        const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/png"));
+        urls.push(await uploadBlob(blob, "png"));
+      } catch { }
+    }
+    return urls;
+  };
+
+  const pageToMarkdown = async (base64: string, imageUrls: string[]): Promise<string> => {
+    return geminiPageToMarkdown(base64, imageUrls, geminiKey);
+  };
+
+  const extractPdf = async (file: File): Promise<string> => {
+    const pdfjsLib = await loadPdfJs();
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const parts: string[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      setImportProgress(`Página ${i}/${pdf.numPages} — extraindo imagens...`);
+      const imageUrls = await extractPageEmbeddedImages(page);
+      setImportProgress(`Página ${i}/${pdf.numPages} — convertendo com IA...`);
+      let md = "";
+      try { md = await pageToMarkdown(await renderPageToBase64(page), imageUrls); }
+      catch { const tc = await page.getTextContent(); md = (tc.items as any[]).map((it: any) => it.str).join(" ").trim(); }
+      if (md.trim()) parts.push(md.trim());
+    }
+    return parts.join("\n\n").replace(/\n{4,}/g, "\n\n").trim();
+  };
+
+  // ── ZIP helpers ────────────────────────────────────────────────────────────
+
+  interface ZipMdFile { name: string; fullPath: string; content: string }
+  interface ZipImgFile { fullPath: string; blob: Blob; ext: string }
 
   const replaceRelativeImages = (md: string, mdFullPath: string, imageMap: Map<string, string>): string => {
     const mdDir = mdFullPath.includes("/") ? mdFullPath.substring(0, mdFullPath.lastIndexOf("/")) : "";
@@ -250,11 +315,6 @@ export default function AdminPage() {
       return match;
     });
   };
-
-  // ── ZIP helpers ──────────────────────────────────────────────────────────
-
-  interface ZipMdFile { name: string; fullPath: string; content: string }
-  interface ZipImgFile { fullPath: string; blob: Blob; ext: string }
 
   const collectZipFiles = async (JSZip: any, data: ArrayBuffer, pp = ""): Promise<{ mdFiles: ZipMdFile[]; imgFiles: ZipImgFile[] }> => {
     const zip = await JSZip.loadAsync(data);
@@ -290,58 +350,7 @@ export default function AdminPage() {
     return { mdFiles: processed, imageCount: imgFiles.length };
   };
 
-  // ── PDF helpers ──────────────────────────────────────────────────────────
-
-  const extractPageEmbeddedImages = async (page: any): Promise<string[]> => {
-    const pdfjsLib = (window as any).pdfjsLib; const ops = await page.getOperatorList(); const urls: string[] = []; const seen = new Set<string>();
-    for (let i = 0; i < ops.fnArray.length; i++) {
-      if (ops.fnArray[i] !== pdfjsLib.OPS.paintImageXObject) continue;
-      const name: string = ops.argsArray[i][0]; if (seen.has(name)) continue; seen.add(name);
-      try {
-        const imgData: any = await new Promise((res) => page.objs.get(name, res)); if (!imgData?.data) continue;
-        const canvas = document.createElement("canvas"); canvas.width = imgData.width; canvas.height = imgData.height;
-        const ctx = canvas.getContext("2d")!; const rgba = new Uint8ClampedArray(imgData.width * imgData.height * 4); const src = imgData.data;
-        if (src.length === imgData.width * imgData.height * 4) { rgba.set(src); }
-        else { for (let p = 0; p < imgData.width * imgData.height; p++) { rgba[p*4]=src[p*3]; rgba[p*4+1]=src[p*3+1]; rgba[p*4+2]=src[p*3+2]; rgba[p*4+3]=255; } }
-        ctx.putImageData(new ImageData(rgba, imgData.width, imgData.height), 0, 0);
-        const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
-        urls.push(await uploadBlob(blob, "jpg"));
-      } catch { }
-    }
-    return urls;
-  };
-
-  const renderPageToBase64 = async (page: any): Promise<string> => {
-    const viewport = page.getViewport({ scale: 2 }); const canvas = document.createElement("canvas");
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext("2d")!, viewport }).promise;
-    return new Promise<string>((res) => { canvas.toBlob((b) => { const r = new FileReader(); r.onload = () => res((r.result as string).split(",")[1]); r.readAsDataURL(b!); }, "image/jpeg", 0.92); });
-  };
-
-  const pageToMarkdown = async (base64: string, imageUrls: string[]): Promise<string> => {
-    if (!anthropicKey) throw new Error("Chave da API Anthropic não configurada.");
-    const imgList = imageUrls.length > 0 ? `\n\nImagens (NA ORDEM):\n${imageUrls.map((u, i) => `${i + 1}: ${u}`).join("\n")}` : "";
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 4000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } }, { type: "text", text: `Converta para Markdown GFM. H1→# H2→## H3→### Negrito→** Itálico→* Callout→> 🔔 ** Preserve emojis.${imgList}\n${imageUrls.length > 0 ? "Insira ![desc](URL) na ordem." : "Sem imagens."}\nRetorne APENAS markdown.` }] }] }),
-    });
-    const data = await res.json(); if (data.error) throw new Error(data.error.message);
-    return data.content?.[0]?.text ?? "";
-  };
-
-  const extractPdf = async (file: File): Promise<string> => {
-    const pdfjsLib = await loadPdfJs(); const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise; const parts: string[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i); setImportProgress(`Página ${i}/${pdf.numPages} — extraindo imagens...`);
-      const imageUrls = await extractPageEmbeddedImages(page); setImportProgress(`Página ${i}/${pdf.numPages} — convertendo com IA...`);
-      let md = ""; try { md = await pageToMarkdown(await renderPageToBase64(page), imageUrls); } catch { const tc = await page.getTextContent(); md = (tc.items as any[]).map((it: any) => it.str).join(" ").trim(); }
-      if (md.trim()) parts.push(md.trim());
-    }
-    return parts.join("\n\n").replace(/\n{4,}/g, "\n\n").trim();
-  };
-
-  // ── Handler de upload ────────────────────────────────────────────────────
+  // ── Upload handler ─────────────────────────────────────────────────────────
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -380,21 +389,15 @@ export default function AdminPage() {
         toast({ title: "✅ Arquivo importado!", description: `${tags.length} tags geradas.` });
       }
     } catch (err: any) { toast({ title: "Erro na importação", description: err.message, variant: "destructive" }); }
-    finally { setImporting(false); setImportProgress(""); if (e.target) e.target.value = ""; }
+    finally { setImporting(false); setImportProgress(""); if (e.target) (e.target as HTMLInputElement).value = ""; }
   };
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────────
 
   const handleSaveModule = async () => {
     if (!editingModule.title) return;
     try {
-      await upsertModule.mutateAsync({
-        ...editingModule,
-        slug: editingModule.slug || slugify(editingModule.title),
-        title: editingModule.title,
-        parent_module_id: editingModule.parent_module_id ?? null,
-        order_index: editingModule.order_index ?? (modules?.length ?? 0),
-      } as any);
+      await upsertModule.mutateAsync({ ...editingModule, slug: editingModule.slug || slugify(editingModule.title), title: editingModule.title, parent_module_id: editingModule.parent_module_id ?? null, order_index: editingModule.order_index ?? (modules?.length ?? 0) } as any);
       setModuleDialog(false); setEditingModule({});
       toast({ title: "✅ Módulo salvo!" });
     } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
@@ -419,29 +422,64 @@ export default function AdminPage() {
     } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
   };
 
-  const openNewPage = () => { setEditingPage({ tags: [] }); setPageEditor(true); };
+  const openNewPage  = () => { setEditingPage({ tags: [] }); setPageEditor(true); };
   const openEditPage = (page: DocPage) => { setEditingPage({ ...page, tags: (page as any).tags || [] }); setPageEditor(true); };
 
-  const filteredPages = allPages?.filter((p) => selectedModuleFilter === "all" || p.module_id === selectedModuleFilter);
-  const getModuleName = (id: string) => modules?.find((m) => m.id === id)?.title || "—";
-  const getModuleSlug = (id: string) => modules?.find((m) => m.id === id)?.slug || "";
-
   const sidebarTabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: "modules", label: "Módulos", icon: <FolderOpen className="h-4 w-4" /> },
-    { key: "pages", label: "Páginas", icon: <FileText className="h-4 w-4" /> },
-    { key: "import", label: "Importar", icon: <Upload className="h-4 w-4" /> },
+    { key: "modules", label: "Módulos",  icon: <FolderOpen className="h-4 w-4" /> },
+    { key: "pages",   label: "Páginas",  icon: <FileText className="h-4 w-4" /> },
+    { key: "import",  label: "Importar", icon: <Upload className="h-4 w-4" /> },
   ];
 
-  // ── Editor de página ─────────────────────────────────────────────────────
+  // ── Editor de página ───────────────────────────────────────────────────────
 
   if (pageEditor) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <div className="h-14 border-b border-border flex items-center px-6 gap-4 sticky top-0 bg-background z-10">
-          <button onClick={() => { setPageEditor(false); setEditingPage({}); }} className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground"><X className="h-4 w-4" /></button>
-          <span className="text-sm font-medium text-foreground flex-1 truncate">{editingPage.id ? `Editando: ${editingPage.title}` : "Nova página"}</span>
-          <Button size="sm" onClick={handleSavePage} disabled={!editingPage.title || !editingPage.module_id}>Salvar página</Button>
+        {/* Header do editor */}
+        <div className="h-14 border-b border-border flex items-center px-6 gap-3 sticky top-0 bg-background z-10">
+          <button
+            onClick={() => { setPageEditor(false); setEditingPage({}); }}
+            className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium text-foreground flex-1 truncate">
+            {editingPage.id ? `Editando: ${editingPage.title}` : "Nova página"}
+          </span>
+
+          {/* ── Botão Diagnóstico IA ── */}
+          <DiagnosticGeneratorButton
+            pageId={editingPage.id ?? ""}
+            pageTitle={editingPage.title ?? ""}
+            pageContent={editingPage.content ?? ""}
+          />
+
+          {/* ── Botão Academia IA ── */}
+          <AcademiaGeneratorButton
+            pageId={editingPage.id ?? ""}
+            pageTitle={editingPage.title ?? ""}
+            pageContent={editingPage.content ?? ""}
+          />
+
+          <Button
+            size="sm"
+            onClick={handleSavePage}
+            disabled={!editingPage.title || !editingPage.module_id}
+            className="text-white font-semibold border-0 disabled:opacity-50"
+            style={{ background: "var(--brand-gradient)" }}
+          >
+            Salvar página
+          </Button>
+
+          <Link to="/docs" target="_blank">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </Button>
+          </Link>
         </div>
+
+        {/* Formulário */}
         <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-8 py-6 gap-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -483,64 +521,70 @@ export default function AdminPage() {
     );
   }
 
-  // ── Layout principal ─────────────────────────────────────────────────────
+  // ── Layout principal ───────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
       <aside className="w-[220px] border-r border-border bg-muted/30 flex flex-col min-h-screen">
         <div className="p-4 border-b border-border">
-          <Link to="/" className="flex items-center gap-2 text-foreground font-bold"><BookOpen className="h-5 w-5 text-primary" /><span>Docs Admin</span></Link>
+          <Link to="/" className="flex items-center gap-2 font-bold">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "var(--brand-gradient)" }}>
+              <BookOpen className="h-4 w-4 text-white" />
+            </div>
+            <span className="brand-text text-base" style={{ letterSpacing: "-0.02em" }}>Docs Admin</span>
+          </Link>
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {sidebarTabs.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}>
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${tab === t.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
               {t.icon}{t.label}
             </button>
           ))}
         </nav>
-        <div className="p-3 border-t border-border space-y-2">
-          <Link to="/docs" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md hover:bg-accent"><Eye className="h-4 w-4" />Ver documentação</Link>
-          <div className="px-3 py-1"><p className="text-xs text-muted-foreground truncate">{user?.email}</p></div>
-          <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={signOut}><LogOut className="h-4 w-4 mr-2" />Sair</Button>
+        <div className="p-3 border-t border-border">
+          <p className="text-xs text-muted-foreground mb-2 truncate">{user?.email}</p>
+          <Button variant="ghost" size="sm" onClick={signOut} className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
+            <LogOut className="h-4 w-4" /> Sair
+          </Button>
         </div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto">
+      {/* Conteúdo principal */}
+      <main className="flex-1 overflow-auto p-8">
 
         {/* ── MÓDULOS ── */}
         {tab === "modules" && (
-          <div className="max-w-3xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Módulos</h1>
-                <p className="text-sm text-muted-foreground mt-1">Organize sua documentação em módulos e submódulos</p>
+                <p className="text-sm text-muted-foreground mt-1">Organize a estrutura da documentação.</p>
               </div>
               <Dialog open={moduleDialog} onOpenChange={(o) => { setModuleDialog(o); if (!o) setEditingModule({}); }}>
-                <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1" /> Novo Módulo</Button></DialogTrigger>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2 text-white border-0" style={{ background: "var(--brand-gradient)" }}><Plus className="h-4 w-4" /> Novo módulo</Button>
+                </DialogTrigger>
                 <DialogContent>
-                  <DialogHeader><DialogTitle>{editingModule.id ? "Editar" : "Novo"} Módulo</DialogTitle></DialogHeader>
+                  <DialogHeader><DialogTitle>{editingModule.id ? "Editar módulo" : "Novo módulo"}</DialogTitle></DialogHeader>
                   <div className="space-y-4 pt-2">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Título *</label>
-                      <Input placeholder="Ex: Integração com PDV" value={editingModule.title || ""} onChange={(e) => setEditingModule({ ...editingModule, title: e.target.value })} />
+                      <Input placeholder="Ex: Financeiro" value={editingModule.title || ""} onChange={(e) => setEditingModule({ ...editingModule, title: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Descrição</label>
-                      <Input placeholder="Breve descrição" value={editingModule.description || ""} onChange={(e) => setEditingModule({ ...editingModule, description: e.target.value })} />
+                      <Input placeholder="Descrição opcional" value={editingModule.description || ""} onChange={(e) => setEditingModule({ ...editingModule, description: e.target.value })} />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Módulo pai <span className="text-muted-foreground font-normal">(deixe vazio para raiz)</span></label>
-                      <Select
-                        value={editingModule.parent_module_id || "none"}
-                        onValueChange={(v) => setEditingModule({ ...editingModule, parent_module_id: v === "none" ? null : v })}
-                      >
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Módulo pai</label>
+                      <Select value={editingModule.parent_module_id || "none"} onValueChange={(v) => setEditingModule({ ...editingModule, parent_module_id: v === "none" ? null : v })}>
                         <SelectTrigger><SelectValue placeholder="Nenhum (módulo raiz)" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">— Nenhum (módulo raiz)</SelectItem>
-                          {allModulesFlat
-                            .filter(({ mod }) => mod.id !== editingModule.id)
-                            .map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
+                          {allModulesFlat.filter(({ mod }) => mod.id !== editingModule.id).map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -548,25 +592,21 @@ export default function AdminPage() {
                       <label className="block text-sm font-medium text-foreground mb-1.5">Slug <span className="text-muted-foreground font-normal">(auto-gerado se vazio)</span></label>
                       <Input placeholder="integracao-pdv" value={editingModule.slug || ""} onChange={(e) => setEditingModule({ ...editingModule, slug: e.target.value })} />
                     </div>
-                    <Button onClick={handleSaveModule} className="w-full" disabled={!editingModule.title}>Salvar Módulo</Button>
+                    <Button onClick={handleSaveModule} className="w-full text-white border-0" style={{ background: "var(--brand-gradient)" }} disabled={!editingModule.title}>Salvar Módulo</Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
 
-            {/* Árvore de módulos */}
             {rootModules.length > 0 ? (
               <div className="space-y-1">
                 {rootModules.map((mod) => (
                   <ModuleTreeItem
-                    key={mod.id}
-                    mod={mod}
-                    subModules={subModulesOf(mod.id)}
-                    subModulesOf={subModulesOf}
-                    expanded={expandedModules}
-                    toggle={toggleModuleExpand}
+                    key={mod.id} mod={mod}
+                    subModules={subModulesOf(mod.id)} subModulesOf={subModulesOf}
+                    expanded={expandedModules} toggle={toggleModuleExpand}
                     onEdit={(m) => { setEditingModule(m); setModuleDialog(true); }}
-                    onDelete={(m) => { if (confirm(`Excluir "${m.title}"? Isso também excluirá os submódulos.`)) deleteModule.mutate(m.id); }}
+                    onDelete={(m) => { if (confirm(`Excluir "${m.title}"? Todas as páginas serão apagadas.`)) deleteModule.mutate(m.id); }}
                     depth={0}
                   />
                 ))}
@@ -574,7 +614,7 @@ export default function AdminPage() {
             ) : (
               <div className="border border-dashed border-border rounded-lg p-12 text-center">
                 <FolderOpen className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground">Nenhum módulo criado ainda</p>
+                <p className="text-muted-foreground">Nenhum módulo. Crie o primeiro!</p>
               </div>
             )}
           </div>
@@ -582,53 +622,61 @@ export default function AdminPage() {
 
         {/* ── PÁGINAS ── */}
         {tab === "pages" && (
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+          <div className="max-w-5xl mx-auto space-y-5">
+            <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Páginas</h1>
-                <p className="text-sm text-muted-foreground mt-1">Gerencie o conteúdo de cada módulo</p>
+                <p className="text-sm text-muted-foreground mt-1">{allPages?.length ?? 0} páginas no total.</p>
               </div>
-              <div className="flex gap-2">
-                <Select value={selectedModuleFilter} onValueChange={setSelectedModuleFilter}>
-                  <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filtrar por módulo" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os módulos</SelectItem>
-                    {allModulesFlat.map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button onClick={openNewPage}><Plus className="h-4 w-4 mr-1" /> Nova Página</Button>
-              </div>
+              <Button size="sm" className="gap-2 text-white border-0" style={{ background: "var(--brand-gradient)" }} onClick={openNewPage}><Plus className="h-4 w-4" /> Nova página</Button>
             </div>
+
+            <div className="flex gap-3 items-center">
+              <Select value={selectedModuleFilter} onValueChange={setSelectedModuleFilter}>
+                <SelectTrigger className="w-[220px]"><SelectValue placeholder="Todos os módulos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os módulos</SelectItem>
+                  {allModulesFlat.map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             {filteredPages && filteredPages.length > 0 ? (
               <div className="border border-border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Título</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulo</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
-                      <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[90px]">Ações</th>
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-border">
+                    <tr>
+                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Título</th>
+                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Módulo</th>
+                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Slug</th>
+                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Tags</th>
+                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredPages.map((page) => (
                       <tr key={page.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3">
+                        <td className="px-5 py-3 font-medium text-foreground">
                           <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium text-sm text-foreground">{page.title}</span>
-                            {page.parent_page_id && <span className="text-[10px] bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">sub</span>}
+                            {page.parent_page_id && <span className="text-muted-foreground/50 text-xs">↳</span>}
+                            {page.title}
+                            {(page as any).academia_content && (
+                              <span title="Academia gerada" className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white" style={{ background: "var(--brand-gradient)" }}>🎓</span>
+                            )}
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-sm text-muted-foreground">{getModuleName(page.module_id)}</td>
+                        <td className="px-5 py-3 text-muted-foreground">
+                          <Link to={`/docs/${getModuleSlug(page.module_id)}/${page.slug}`} target="_blank" className="hover:text-primary transition-colors flex items-center gap-1">
+                            {getModuleName(page.module_id)} <Eye className="h-3 w-3 opacity-50" />
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{page.slug}</td>
                         <td className="px-5 py-3">
                           <div className="flex flex-wrap gap-1">
-                            {((page as any).tags || []).slice(0, 4).map((tag: string) => (
-                              <span key={tag} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
-                                <Tag className="h-2.5 w-2.5" />{tag}
-                              </span>
+                            {((page as any).tags || []).slice(0, 3).map((t: string) => (
+                              <span key={t} className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-medium">{t}</span>
                             ))}
-                            {((page as any).tags || []).length > 4 && <span className="text-[10px] text-muted-foreground">+{(page as any).tags.length - 4}</span>}
+                            {((page as any).tags || []).length > 3 && <span className="text-[10px] text-muted-foreground">+{(page as any).tags.length - 3}</span>}
                             {(!(page as any).tags || (page as any).tags.length === 0) && <span className="text-[10px] text-muted-foreground/50 italic">sem tags</span>}
                           </div>
                         </td>
@@ -659,52 +707,57 @@ export default function AdminPage() {
               <h1 className="text-2xl font-bold text-foreground">Importar conteúdo</h1>
               <p className="text-sm text-muted-foreground mt-1">Imagens e tags geradas automaticamente em qualquer formato.</p>
             </div>
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-5">
-              <p className="text-sm font-semibold text-primary mb-2">✦ Importação recomendada: Notion → ZIP</p>
+            <div className="rounded-lg p-5" style={{ border: "1px solid rgba(91,33,182,0.3)", background: "linear-gradient(135deg, rgba(91,33,182,0.05) 0%, rgba(255,107,0,0.04) 100%)" }}>
+              <p className="text-sm font-semibold mb-2 brand-text">✦ Importação recomendada: Notion → ZIP</p>
               <p className="text-sm text-muted-foreground mb-3">Exporte como <strong className="text-foreground">Markdown &amp; CSV</strong> e importe o <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> — imagens e tags geradas automaticamente.</p>
               <ol className="text-sm text-muted-foreground space-y-1 list-decimal pl-4">
                 <li>Notion → ··· → Export → <strong className="text-foreground">Markdown &amp; CSV</strong></li>
                 <li>Selecione o módulo abaixo e importe o <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code></li>
               </ol>
             </div>
-            <div className="rounded-lg border border-border p-5">
-              <p className="text-sm font-semibold text-foreground mb-1">🔑 Chave da API Anthropic <span className="font-normal text-muted-foreground">(PDF + auto-tag)</span></p>
-              <p className="text-xs text-muted-foreground mb-3">Usada localmente. Não salva no servidor.</p>
-              <Input type="password" placeholder="sk-ant-..." value={anthropicKey} onChange={(e) => { setAnthropicKey(e.target.value); localStorage.setItem("anthropic_key", e.target.value); }} />
-            </div>
-            <div className="space-y-5 border border-border rounded-lg p-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Título da página *</label>
-                  <Input placeholder="Ex: Guia de instalação" value={importTitle} onChange={(e) => setImportTitle(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Módulo *</label>
-                  <Select value={importModuleId} onValueChange={setImportModuleId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione o módulo" /></SelectTrigger>
-                    <SelectContent>{allModulesFlat.map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
+
+            <div className="rounded-lg border border-border p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Arquivo</label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/30 transition-colors">
-                  {importing ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm text-muted-foreground">{importProgress || "Processando..."}</p>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground mb-1">Clique para selecionar</p>
-                      <p className="text-xs text-muted-foreground/60 mb-3">.zip · .md · .html · .pdf — imagens e tags automáticas</p>
-                      <input type="file" accept=".md,.html,.htm,.pdf,.zip" onChange={handleFileUpload}
-                        className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80 cursor-pointer" />
-                    </>
-                  )}
-                </div>
+                <p className="text-sm font-semibold text-foreground mb-1">🔑 Chave da API Gemini <span className="font-normal text-muted-foreground">(PDF + auto-tag + Academia — <a href="https://aistudio.google.com" target="_blank" className="underline">grátis aqui</a>)</span></p>
+                <p className="text-xs text-muted-foreground mb-2">Usada localmente. Nunca enviada a servidores externos além do Google.</p>
+                <Input
+                  type="password"
+                  placeholder="AIza..."
+                  value={geminiKey}
+                  onChange={(e) => { setGeminiKey(e.target.value); localStorage.setItem("gemini_key", e.target.value); }}
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Módulo de destino *</label>
+                <Select value={importModuleId} onValueChange={setImportModuleId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o módulo" /></SelectTrigger>
+                  <SelectContent>{allModulesFlat.map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Título da página *</label>
+                <Input placeholder="Ex: Configuração do Asaas" value={importTitle} onChange={(e) => setImportTitle(e.target.value)} />
+              </div>
+
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                {importing ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-muted-foreground">{importProgress || "Processando..."}</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground mb-1">Clique para selecionar</p>
+                    <p className="text-xs text-muted-foreground/60 mb-3">.zip · .md · .html · .pdf — imagens e tags automáticas</p>
+                    <input type="file" accept=".md,.html,.htm,.pdf,.zip" onChange={handleFileUpload}
+                      className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80 cursor-pointer" />
+                  </>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tags <span className="text-muted-foreground font-normal text-xs">(geradas pela IA, edite se quiser)</span></label>
                 <TagInput tags={importTags} onChange={setImportTags} />
@@ -713,7 +766,7 @@ export default function AdminPage() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Conteúdo</label>
                 <MarkdownEditor value={importContent} onChange={setImportContent} minRows={16} />
               </div>
-              <Button onClick={handleImport} className="w-full" disabled={!importTitle || !importModuleId || !importContent}>
+              <Button onClick={handleImport} className="w-full text-white border-0" style={{ background: "var(--brand-gradient)" }} disabled={!importTitle || !importModuleId || !importContent}>
                 <Upload className="h-4 w-4 mr-2" />Importar Página
               </Button>
             </div>
@@ -724,7 +777,7 @@ export default function AdminPage() {
   );
 }
 
-// ── Item da árvore de módulos (recursivo) ─────────────────────────────────────
+// ── ModuleTreeItem (recursivo) ────────────────────────────────────────────────
 
 function ModuleTreeItem({
   mod, subModules, subModulesOf, expanded, toggle, onEdit, onDelete, depth,
@@ -743,40 +796,30 @@ function ModuleTreeItem({
 
   return (
     <div className={depth > 0 ? "ml-4 border-l border-border/40 pl-3" : ""}>
-      <div className="border border-border rounded-lg p-3 flex items-center gap-3 bg-background hover:bg-muted/10 transition-colors mb-1">
+      <div className="border border-border rounded-lg p-3 flex items-center gap-3 bg-background hover:bg-muted/10 transition-colors mb-1 group">
         {hasChildren ? (
-          <button onClick={() => toggle(mod.id)} className="p-0.5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+          <button onClick={() => toggle(mod.id)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
-          <div className="w-5 flex-shrink-0" />
+          <div className="w-6 h-6" />
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-foreground text-sm">{mod.title}</p>
-            {depth > 0 && <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">submódulo</span>}
-          </div>
-          {mod.description && <p className="text-xs text-muted-foreground mt-0.5">{mod.description}</p>}
-          <p className="text-xs text-muted-foreground/60 mt-0.5 font-mono">/{mod.slug}</p>
+          <p className="text-sm font-medium text-foreground truncate">{mod.title}</p>
+          {mod.description && <p className="text-xs text-muted-foreground truncate">{mod.description}</p>}
         </div>
-        <div className="flex gap-1 flex-shrink-0">
-          <Button variant="ghost" size="icon" onClick={() => onEdit(mod)}><Edit className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => onDelete(mod)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-        </div>
+        <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded hidden sm:inline">{mod.slug}</span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(mod)}><Edit className="h-3.5 w-3.5" /></Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(mod)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
       </div>
-
       {isExpanded && hasChildren && (
-        <div className="mb-2 space-y-1">
+        <div className="mt-1">
           {subModules.map((sub) => (
             <ModuleTreeItem
-              key={sub.id}
-              mod={sub}
-              subModules={subModulesOf(sub.id)}
-              subModulesOf={subModulesOf}
-              expanded={expanded}
-              toggle={toggle}
-              onEdit={onEdit}
-              onDelete={onDelete}
+              key={sub.id} mod={sub}
+              subModules={subModulesOf(sub.id)} subModulesOf={subModulesOf}
+              expanded={expanded} toggle={toggle}
+              onEdit={onEdit} onDelete={onDelete}
               depth={depth + 1}
             />
           ))}

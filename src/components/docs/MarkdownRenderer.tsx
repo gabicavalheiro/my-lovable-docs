@@ -1,63 +1,78 @@
-import React from "react";
+import React, { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import { headingToId } from "@/lib/heading-utils";
+import { sanitizeMarkdown } from "@/lib/sanitize";
 
 interface Props {
   content: string;
 }
 
-/**
- * Extrai texto puro de children React (recursivo).
- * Necessário porque ReactMarkdown pode passar arrays ou elementos
- * quando o heading tem formatação inline como **negrito** ou *itálico*.
+/* ─── Extração de texto puro dos children React ────────────────────────────────
+ * Necessário porque ReactMarkdown passa arrays ou elementos quando o heading
+ * contém formatação inline como **negrito** ou *itálico*.
+ *
+ * Definida fora do componente para não ser recriada a cada render.
  */
 function childrenToText(children: React.ReactNode): string {
   if (children === null || children === undefined) return "";
   if (typeof children === "string") return children;
-  if (typeof children === "number" || typeof children === "boolean") return String(children);
+  if (typeof children === "number" || typeof children === "boolean")
+    return String(children);
   if (Array.isArray(children)) return children.map(childrenToText).join("");
   if (React.isValidElement(children)) {
-    return childrenToText((children.props as any).children);
+    return childrenToText((children.props as { children?: React.ReactNode }).children);
   }
   return "";
 }
 
-/** Deve ser IDÊNTICA à função headingToId do DocTableOfContents */
-export function headingToId(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")   // remove acentos
-    .replace(/[^\w\s-]/g, "")          // remove caracteres especiais (*, ?, !, emojis…)
-    .replace(/\s+/g, "-")              // espaços → hífen
-    .replace(/-+/g, "-")               // hífens duplos → simples
-    .replace(/^-|-$/g, "")             // remove hífens nas bordas
-    .trim();
-}
+/* ─── Componentes de heading ────────────────────────────────────────────────────
+ * Criados UMA VEZ fora do escopo do componente.
+ * Sem isso, React reconcilia como componentes diferentes a cada render, causando
+ * re-mount desnecessário e perdendo o scroll position do TOC.
+ */
+const H1 = ({ children, ...props }: React.ComponentPropsWithoutRef<"h1">) => (
+  <h1 id={headingToId(childrenToText(children))} {...props}>{children}</h1>
+);
+const H2 = ({ children, ...props }: React.ComponentPropsWithoutRef<"h2">) => (
+  <h2 id={headingToId(childrenToText(children))} {...props}>{children}</h2>
+);
+const H3 = ({ children, ...props }: React.ComponentPropsWithoutRef<"h3">) => (
+  <h3 id={headingToId(childrenToText(children))} {...props}>{children}</h3>
+);
+const H4 = ({ children, ...props }: React.ComponentPropsWithoutRef<"h4">) => (
+  <h4 id={headingToId(childrenToText(children))} {...props}>{children}</h4>
+);
 
-function makeHeading(Tag: "h1" | "h2" | "h3" | "h4") {
-  return ({ children, ...props }: any) => {
-    const id = headingToId(childrenToText(children));
-    return <Tag id={id} {...props}>{children}</Tag>;
-  };
-}
+/** Mapeamento estático — nunca recriado */
+const MARKDOWN_COMPONENTS = { h1: H1, h2: H2, h3: H3, h4: H4 } as const;
 
-export function MarkdownRenderer({ content }: Props) {
+/** Plugins estáticos — nunca recriados */
+const REMARK_PLUGINS = [remarkGfm];
+const REHYPE_PLUGINS = [rehypeRaw];
+
+/* ─── Componente principal ──────────────────────────────────────────────────────
+ * memo() evita re-render quando o conteúdo não mudou.
+ * Isso é crítico: o componente pai (DocsPage) pode re-renderizar por outros
+ * motivos (ex: sidebar hover, TOC scroll) sem que o content tenha mudado.
+ */
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: Props) {
+  // Sanitiza uma vez, memoizado pelo conteúdo
+  const safeContent = useMemo(() => sanitizeMarkdown(content), [content]);
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
-        components={{
-          h1: makeHeading("h1"),
-          h2: makeHeading("h2"),
-          h3: makeHeading("h3"),
-          h4: makeHeading("h4"),
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
       >
-        {content}
+        {safeContent}
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+// Re-exporta para compatibilidade com DocTableOfContents
+export { headingToId };
