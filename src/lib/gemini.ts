@@ -1,29 +1,33 @@
 /* ─────────────────────────────────────────────────────────────────────────────
- * Cliente Gemini 2.0 Flash
- * Chave grátis em: https://aistudio.google.com  (1.500 req/dia · 15 req/min)
+ * Cliente Gemini — fallback automático entre modelos disponíveis
+ * Chave grátis em: https://aistudio.google.com
  *
- * Inclui retry automático quando a API retorna rate-limit (429).
- * A mensagem de erro contém "Please retry in Xs" — parseamos e esperamos.
+ * MODELOS: mesma lista usada em AcademiaGeneratorButton e DiagnosticGeneratorButton.
+ * Tenta na ordem; pula para o próximo em caso de 404/400 (modelo indisponível).
+ * Faz retry automático em rate-limit (429/503).
  * ───────────────────────────────────────────────────────────────────────────── */
 
 import type { AcademiaData } from "@/lib/generate-academia";
 
-const MODEL    = "gemini-2.0-flash-lite";
-const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+/* ── Modelos em ordem de preferência (espelha AcademiaGeneratorButton) ──────── */
+export const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-pro",
+];
 
-/* ── Callback de progresso para o UI ────────────────────────────────────────── */
+const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
 export type OnRetry = (waitSeconds: number) => void;
 
-/* ── Sleep helper ────────────────────────────────────────────────────────────── */
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/* ── Extrai segundos de espera da mensagem de erro do Google ─────────────────── */
 function parseRetryAfter(msg: string): number | null {
   const match = msg.match(/retry in ([\d.]+)s/i);
   return match ? Math.ceil(parseFloat(match[1])) + 1 : null;
 }
 
-/* ── Chamada base com retry automático ───────────────────────────────────────── */
+/* ── Chamada base com fallback de modelo + retry automático ─────────────────── */
 async function callGemini(
   apiKey: string,
   parts: object[],
@@ -31,39 +35,47 @@ async function callGemini(
   onRetry?: OnRetry,
   maxRetries = 3
 ): Promise<string> {
-  const url = `${BASE_URL}?key=${apiKey}`;
+  let lastError = "Nenhum modelo disponível.";
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { maxOutputTokens: maxTokens },
-      }),
-    });
+  for (const model of GEMINI_MODELS) {
+    const url = `${BASE}/${model}:generateContent?key=${apiKey}`;
 
-    if (res.ok) {
-      const data = await res.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      }
+
+      const err  = await res.json().catch(() => ({}));
+      const msg  = (err as any)?.error?.message ?? `Erro HTTP ${res.status}`;
+      lastError  = msg;
+
+      // Modelo descontinuado/indisponível → pula para o próximo
+      if (res.status === 404 || res.status === 400) break;
+
+      // Rate-limit → espera e retenta o mesmo modelo
+      if ((res.status === 429 || res.status === 503) && attempt < maxRetries) {
+        const wait = parseRetryAfter(msg) ?? 30;
+        onRetry?.(wait);
+        await sleep(wait * 1000);
+        onRetry?.(0);
+        continue;
+      }
+
+      throw new Error(msg);
     }
-
-    const err  = await res.json().catch(() => ({}));
-    const msg  = (err as any)?.error?.message ?? `Erro HTTP ${res.status}`;
-    const wait = parseRetryAfter(msg);
-
-    // Se for rate-limit e ainda temos tentativas, espera e tenta de novo
-    if ((res.status === 429 || res.status === 503) && wait && attempt < maxRetries) {
-      onRetry?.(wait);
-      await sleep(wait * 1000);
-      onRetry?.(0);
-      continue;
-    }
-
-    throw new Error(msg);
   }
 
-  throw new Error("Limite de tentativas atingido. Tente novamente em alguns segundos.");
+  throw new Error(lastError);
 }
 
 /* ── 1. Gerar tags ───────────────────────────────────────────────────────────── */
@@ -86,8 +98,8 @@ Título: ${title}
 Conteúdo: ${content.slice(0, 3000)}`;
 
   try {
-    const raw   = await callGemini(apiKey, [{ text: prompt }], 200, onRetry);
-    const clean = raw.replace(/```json?|```/g, "").trim();
+    const raw    = await callGemini(apiKey, [{ text: prompt }], 200, onRetry);
+    const clean  = raw.replace(/```json?|```/g, "").trim();
     const parsed = JSON.parse(clean);
     if (Array.isArray(parsed)) {
       return parsed.map((t: any) => String(t).toLowerCase().trim()).filter(Boolean);

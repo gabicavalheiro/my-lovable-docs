@@ -1,98 +1,124 @@
 /**
  * AcademiaGeneratorButton — completamente autocontido.
- * A chamada ao Gemini, os tipos e o retry estão aqui dentro.
- * Elimina qualquer dependência circular que impedia a geração.
+ * Fix: maxOutputTokens 8192 + repair robusto de JSON truncado.
  */
-
 import { useState, useEffect, useRef } from "react";
-import { Sparkles, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Sparkles, Loader2, CheckCircle2, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-// ── Tipos da Academia ─────────────────────────────────────────────────────────
-
-interface AcademiaOption {
-  id: string;
-  text: string;
-  isCorrect: boolean;
-  feedback: string;
-  nextStepId: string;
-}
-
-interface AcademiaStep {
-  id: string;
-  type: "intro" | "quiz" | "end";
-  content: string;
-  badge?: { type: "warning" | "tip"; text: string };
-  options?: AcademiaOption[];
-  nextStepId?: string;
-}
-
-interface AcademiaData {
-  title: string;
-  subtitle: string;
-  steps: AcademiaStep[];
-}
-
-// ── Prompt do Gemini ──────────────────────────────────────────────────────────
+interface AcademiaOption { id: string; text: string; isCorrect: boolean; feedback: string; nextStepId: string; }
+interface AcademiaStep { id: string; type: "intro" | "quiz" | "end"; content: string; badge?: { type: "warning" | "tip"; text: string }; options?: AcademiaOption[]; nextStepId?: string; }
+interface AcademiaData { title: string; subtitle: string; steps: AcademiaStep[]; }
 
 const buildPrompt = (title: string, content: string) => `Você é um especialista em design instrucional para sistemas ERP.
-Analise o conteúdo abaixo e crie um módulo "Academia" interativo com 5 perguntas.
+Crie um módulo Academia com exatamente 5 perguntas de múltipla escolha sobre o conteúdo abaixo.
 
 REGRAS:
-- Exatamente 5 perguntas de múltipla escolha, 3 opções cada (a, b, c), 1 correta
-- Feedback explicativo: use ✅ para correto e ❌ para incorreto
-- Foque em regras práticas, fluxos e alertas importantes
-- Retorne SOMENTE JSON válido, sem markdown, sem texto fora do JSON
+- 5 perguntas (quiz), 3 opcoes cada (a, b, c), 1 correta
+- Feedback curto e direto (maximo 20 palavras por feedback)
+- Use texto simples sem emojis no feedback
+- Retorne SOMENTE o JSON, sem texto adicional
 
-JSON esperado:
+JSON (siga exatamente esta estrutura):
 {
-  "title": "Academia: ${title}",
-  "subtitle": "Valide seu domínio operacional sobre este módulo",
+  "title": "Academia: TITULO",
+  "subtitle": "Teste seus conhecimentos",
   "steps": [
-    { "id": "intro", "type": "intro", "content": "Descrição de 2-3 linhas do que será testado.", "nextStepId": "q1" },
-    {
-      "id": "q1", "type": "quiz", "content": "Pergunta 1?",
-      "options": [
-        { "id": "a", "text": "Opção A", "isCorrect": false, "feedback": "❌ Explicação.", "nextStepId": "q2" },
-        { "id": "b", "text": "Opção B", "isCorrect": true,  "feedback": "✅ Correto! Explicação.", "nextStepId": "q2" },
-        { "id": "c", "text": "Opção C", "isCorrect": false, "feedback": "❌ Explicação.", "nextStepId": "q2" }
-      ]
-    },
-    { "id": "q2", "type": "quiz", "content": "Pergunta 2?", "options": [{"id":"a","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q3"},{"id":"b","text":"...","isCorrect":true,"feedback":"✅ ...","nextStepId":"q3"},{"id":"c","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q3"}] },
-    { "id": "q3", "type": "quiz", "content": "Pergunta 3?", "badge": { "type": "warning", "text": "Atenção: regra crítica." }, "options": [{"id":"a","text":"...","isCorrect":true,"feedback":"✅ ...","nextStepId":"q4"},{"id":"b","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q4"},{"id":"c","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q4"}] },
-    { "id": "q4", "type": "quiz", "content": "Pergunta 4?", "options": [{"id":"a","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q5"},{"id":"b","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"q5"},{"id":"c","text":"...","isCorrect":true,"feedback":"✅ ...","nextStepId":"q5"}] },
-    { "id": "q5", "type": "quiz", "content": "Pergunta 5?", "badge": { "type": "tip", "text": "Dica operacional." }, "options": [{"id":"a","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"end"},{"id":"b","text":"...","isCorrect":true,"feedback":"✅ ...","nextStepId":"end"},{"id":"c","text":"...","isCorrect":false,"feedback":"❌ ...","nextStepId":"end"}] },
-    { "id": "end", "type": "end", "content": "Mensagem de conclusão motivacional (2-3 linhas)." }
+    {"id":"intro","type":"intro","content":"Descricao breve do que sera testado.","nextStepId":"q1"},
+    {"id":"q1","type":"quiz","content":"Pergunta 1?","options":[{"id":"a","text":"Op A","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q2"},{"id":"b","text":"Op B","isCorrect":true,"feedback":"Correto!","nextStepId":"q2"},{"id":"c","text":"Op C","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q2"}]},
+    {"id":"q2","type":"quiz","content":"Pergunta 2?","options":[{"id":"a","text":"Op A","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q3"},{"id":"b","text":"Op B","isCorrect":true,"feedback":"Correto!","nextStepId":"q3"},{"id":"c","text":"Op C","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q3"}]},
+    {"id":"q3","type":"quiz","content":"Pergunta 3?","options":[{"id":"a","text":"Op A","isCorrect":true,"feedback":"Correto!","nextStepId":"q4"},{"id":"b","text":"Op B","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q4"},{"id":"c","text":"Op C","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q4"}]},
+    {"id":"q4","type":"quiz","content":"Pergunta 4?","options":[{"id":"a","text":"Op A","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q5"},{"id":"b","text":"Op B","isCorrect":false,"feedback":"Incorreto.","nextStepId":"q5"},{"id":"c","text":"Op C","isCorrect":true,"feedback":"Correto!","nextStepId":"q5"}]},
+    {"id":"q5","type":"quiz","content":"Pergunta 5?","options":[{"id":"a","text":"Op A","isCorrect":false,"feedback":"Incorreto.","nextStepId":"end"},{"id":"b","text":"Op B","isCorrect":true,"feedback":"Correto!","nextStepId":"end"},{"id":"c","text":"Op C","isCorrect":false,"feedback":"Incorreto.","nextStepId":"end"}]},
+    {"id":"end","type":"end","content":"Conclusao motivacional breve."}
   ]
 }
 
----
-Título: "${title}"
-Conteúdo do manual:
-${content.slice(0, 10000)}`;
+Titulo: ${title.replace(/["\n\r]/g, " ")}
 
-// ── Chamada direta ao Gemini com retry ────────────────────────────────────────
+Conteudo:
+${content.slice(0, 6000).replace(/[\u0000-\u001F\u007F]/g, " ")}`;
 
-// Modelos em ordem de preferência — tenta o próximo se o atual não estiver disponível
-const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-pro",
-];
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
 
-async function callGeminiDirectly(
-  apiKey: string,
-  prompt: string,
-  onWait: (s: number) => void
-): Promise<AcademiaData> {
-  let lastError = "Nenhum modelo Gemini disponível para esta chave.";
+/* ── Repara JSON truncado fechando estruturas abertas ── */
+function repairTruncated(raw: string): string {
+  // Encontra o início do JSON
+  const start = raw.indexOf("{");
+  if (start < 0) return raw;
+  let s = raw.slice(start).trimEnd();
+
+  // Remove vírgula/dois-pontos pendente no final
+  s = s.replace(/[,:{[\s]+$/, "");
+
+  // Conta profundidade de chaves e colchetes
+  let braces = 0, brackets = 0;
+  let inString = false, escape = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
+  }
+
+  // Fecha string aberta
+  if (inString) s += '"';
+  // Fecha estruturas abertas
+  while (brackets > 0) { s += "]"; brackets--; }
+  while (braces > 0)   { s += "}"; braces--; }
+
+  return s;
+}
+
+/* ── Extração de JSON com 5 estratégias ── */
+function parseAcademia(raw: string): AcademiaData {
+  const tryParse = (s: string): AcademiaData | null => {
+    try {
+      const p = JSON.parse(s);
+      // Aceita mesmo com poucos steps — o conteúdo foi truncado mas é válido
+      if (p?.steps && Array.isArray(p.steps) && p.steps.length >= 1) return p;
+    } catch { /* continua */ }
+    return null;
+  };
+
+  // 1. Parse direto
+  let r = tryParse(raw.trim()); if (r) return r;
+
+  // 2. Remove fences markdown
+  r = tryParse(raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim()); if (r) return r;
+
+  // 3. Extrai entre primeiro { e último }
+  const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
+  if (s >= 0 && e > s) { r = tryParse(raw.slice(s, e + 1)); if (r) return r; }
+
+  // 4. Repair de truncamento
+  const repaired = repairTruncated(raw);
+  r = tryParse(repaired); if (r) return r;
+
+  // 5. Repair + remoção do último step incompleto
+  // Remove o último elemento incompleto do array steps
+  const withoutLast = repaired.replace(/,\s*\{[^}]*$/, "").replace(/,\s*\[[^\]]*$/, "");
+  const repairedAgain = repairTruncated(withoutLast);
+  r = tryParse(repairedAgain); if (r) return r;
+
+  console.error("[Academia] Todas estratégias falharam. Raw:", raw.slice(0, 300));
+  throw new Error("IA retornou JSON inválido. Tente novamente.");
+}
+
+async function callGemini(apiKey: string, prompt: string, onWait: (s: number) => void): Promise<AcademiaData> {
+  let lastError = "Nenhum modelo disponível.";
 
   for (const model of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    console.log("[Academia] Tentando modelo:", model);
-    let modelSkip = false;
+    let skipModel = false;
 
     for (let attempt = 0; attempt < 4; attempt++) {
       let res: Response;
@@ -102,167 +128,112 @@ async function callGeminiDirectly(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 4000 },
+            generationConfig: {
+              maxOutputTokens: 8192,              // ← aumentado de 4096 para 8192
+              response_mime_type: "application/json",
+            },
           }),
         });
-      } catch (networkErr) {
-        throw new Error("Erro de rede. Verifique sua conexão.");
-      }
+      } catch { throw new Error("Erro de rede. Verifique sua conexão."); }
 
       if (res.ok) {
         const data = await res.json();
-        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-        const clean = raw.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
-        let parsed: AcademiaData;
-        try {
-          parsed = JSON.parse(clean);
-        } catch {
-          throw new Error("IA retornou formato inválido. Tente novamente.");
-        }
-        if (!parsed?.steps?.length) throw new Error("Resposta incompleta da IA.");
-        console.log("[Academia] Sucesso com modelo:", model);
-        return parsed;
+        const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        const finishReason = data?.candidates?.[0]?.finishReason;
+        console.log("[Academia] Modelo:", model, "| Finish:", finishReason, "| Raw length:", raw.length);
+        return parseAcademia(raw);
       }
 
       const errBody = await res.json().catch(() => ({}));
       const msg: string = (errBody as any)?.error?.message ?? `Erro HTTP ${res.status}`;
       lastError = msg;
 
-      // Modelo descontinuado ou não disponível → tenta o próximo da lista
-      if (res.status === 404 || res.status === 400) {
-        console.warn("[Academia] Modelo não disponível:", model, "→ tentando próximo");
-        modelSkip = true;
-        break;
-      }
-
-      // Rate-limit → espera e retenta o mesmo modelo
+      if (res.status === 404 || res.status === 400) { skipModel = true; break; }
       if (res.status === 429 || res.status === 503) {
-        const match = msg.match(/retry in ([\d.]+)s/i);
-        const wait = match ? Math.ceil(parseFloat(match[1])) + 1 : 30;
-        console.log("[Academia] Rate-limit, aguardando", wait, "s...");
-        onWait(wait);
-        await new Promise<void>((r) => setTimeout(r, wait * 1000));
-        onWait(0);
+        const m = msg.match(/retry in ([\d.]+)s/i);
+        const wait = m ? Math.ceil(parseFloat(m[1])) + 1 : 30;
+        onWait(wait); await new Promise<void>((r) => setTimeout(r, wait * 1000)); onWait(0);
         continue;
       }
-
-      // Qualquer outro erro (auth, etc.) → falha imediata
       throw new Error(msg);
     }
-
-    if (modelSkip) continue;
+    if (skipModel) continue;
   }
-
   throw new Error(lastError);
 }
 
+interface Props { pageId: string; pageTitle: string; pageContent: string; hasContent?: boolean; }
 
-// ── Componente ────────────────────────────────────────────────────────────────
-
-interface Props {
-  pageId: string;
-  pageTitle: string;
-  pageContent: string;
-}
-
-export function AcademiaGeneratorButton({ pageId, pageTitle, pageContent }: Props) {
+export function AcademiaGeneratorButton({ pageId, pageTitle, pageContent, hasContent = false }: Props) {
   const [loading, setLoading]     = useState(false);
-  const [done, setDone]           = useState(false);
+  const [saved, setSaved]         = useState(hasContent);
+  const [justDone, setJustDone]   = useState(false);
   const [countdown, setCountdown] = useState(0);
   const timerRef                  = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast }                 = useToast();
 
+  useEffect(() => { setSaved(hasContent); }, [hasContent]);
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  const startCountdown = (seconds: number) => {
+  const startCountdown = (s: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (seconds <= 0) { setCountdown(0); return; }
-    setCountdown(seconds);
+    if (s <= 0) { setCountdown(0); return; }
+    setCountdown(s);
     timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) { clearInterval(timerRef.current!); timerRef.current = null; return 0; }
-        return prev - 1;
-      });
+      setCountdown((p) => { if (p <= 1) { clearInterval(timerRef.current!); timerRef.current = null; return 0; } return p - 1; });
     }, 1000);
   };
 
   const handleGenerate = async () => {
-    if (!pageId) {
-      toast({ title: "Salve a página primeiro", description: "A página precisa ter sido salva para gerar a Academia.", variant: "destructive" });
-      return;
-    }
-    if (!pageContent.trim()) {
-      toast({ title: "Página sem conteúdo", description: "Adicione conteúdo antes de gerar a Academia.", variant: "destructive" });
-      return;
-    }
-
-    const apiKey = localStorage.getItem("gemini_key")
-      ?? localStorage.getItem("anthropic_key")  // compatibilidade com chave antiga
-      ?? "";
-
-    if (!apiKey) {
-      toast({
-        title: "Chave Gemini não encontrada",
-        description: "Cole a chave (AIza...) na aba Importar. Grátis em aistudio.google.com",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!pageId)             { toast({ title: "Salve a página primeiro", variant: "destructive" }); return; }
+    if (!pageContent.trim()) { toast({ title: "Página sem conteúdo", variant: "destructive" }); return; }
+    const apiKey = localStorage.getItem("gemini_key") ?? localStorage.getItem("anthropic_key") ?? "";
+    if (!apiKey)             { toast({ title: "Chave Gemini não configurada", description: "Configure em Configurações.", variant: "destructive" }); return; }
 
     setLoading(true);
-    setDone(false);
-
     try {
-      console.log("[Academia] Iniciando geração para:", pageTitle);
-      const academia = await callGeminiDirectly(apiKey, buildPrompt(pageTitle, pageContent), startCountdown);
-      console.log("[Academia] Gerada com sucesso:", academia.steps.length, "steps");
+      const academia = await callGemini(apiKey, buildPrompt(pageTitle, pageContent), startCountdown);
+      const { error } = await supabase.from("doc_pages").update({ academia_content: academia } as any).eq("id", pageId);
+      if (error) throw new Error(error.message);
 
-      const { error } = await supabase
-        .from("doc_pages")
-        .update({ academia_content: academia } as any)
-        .eq("id", pageId);
-
-      if (error) {
-        console.error("[Academia] Erro Supabase:", error);
-        throw new Error(error.message);
-      }
-
-      console.log("[Academia] Salva no Supabase ✓");
-      setDone(true);
-      toast({
-        title: "🎓 Academia gerada!",
-        description: `${academia.steps.filter((s) => s.type === "quiz").length} perguntas criadas para "${pageTitle}".`,
-      });
-      setTimeout(() => setDone(false), 5000);
+      setSaved(true); setJustDone(true);
+      setTimeout(() => setJustDone(false), 3000);
+      toast({ title: "🎓 Academia gerada!", description: `${academia.steps.filter((s) => s.type === "quiz").length} perguntas criadas para "${pageTitle}".` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[Academia] Erro:", msg);
       toast({ title: "Erro ao gerar Academia", description: msg, variant: "destructive" });
     } finally {
-      setLoading(false);
-      setCountdown(0);
+      setLoading(false); setCountdown(0);
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
   };
 
+  const isSavedIdle = saved && !loading && !justDone;
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={handleGenerate}
-      disabled={loading || !pageId}
-      className="gap-2 border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-400 min-w-[165px] justify-center"
-    >
-      {loading && countdown > 0 ? (
-        <><Clock className="h-4 w-4 text-amber-500" /><span className="text-amber-600">Aguardando… {countdown}s</span></>
-      ) : loading ? (
-        <><Loader2 className="h-4 w-4 animate-spin" /> Gerando Academia…</>
-      ) : done ? (
-        <><CheckCircle2 className="h-4 w-4 text-green-600" /> Academia gerada!</>
-      ) : (
-        <><Sparkles className="h-4 w-4" /> Gerar Academia IA</>
+    <div className="relative inline-flex">
+      <Button type="button" variant="outline" size="sm" onClick={handleGenerate} disabled={loading || !pageId}
+        className={`gap-2 min-w-[165px] justify-center transition-all ${
+          justDone      ? "border-green-400 text-green-700 bg-green-50"
+          : isSavedIdle ? "border-violet-400 text-violet-700 bg-violet-50/60 hover:bg-violet-50"
+          :               "border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-400"
+        }`}>
+        {loading && countdown > 0 ? (
+          <><Clock className="h-4 w-4 text-amber-500" /><span className="text-amber-600">Aguardando… {countdown}s</span></>
+        ) : loading ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Gerando Academia…</>
+        ) : justDone ? (
+          <><CheckCircle2 className="h-4 w-4 text-green-600" /> Academia salva!</>
+        ) : isSavedIdle ? (
+          <><RefreshCw className="h-3.5 w-3.5" /> Regen. Academia IA</>
+        ) : (
+          <><Sparkles className="h-4 w-4" /> Gerar Academia IA</>
+        )}
+      </Button>
+      {saved && !loading && (
+        <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full text-white"
+          style={{ background: "#7c3aed", fontSize: 9, fontWeight: 700 }} title="Academia salva no banco">✓</span>
       )}
-    </Button>
+    </div>
   );
 }

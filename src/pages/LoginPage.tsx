@@ -1,27 +1,24 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
-import { BookOpen, LogIn, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Loader2, LogIn } from "lucide-react";
 
 export default function LoginPage() {
-  const { signIn }    = useAuth();
-  const navigate      = useNavigate();
+  const { signIn } = useAuth();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError(null);
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate("/admin");
     } catch (err: any) {
       setError(
-        err.message === "Invalid login credentials"
+        err.message?.includes("Invalid login credentials")
           ? "Email ou senha inválidos."
           : err.message
       );
@@ -42,20 +39,14 @@ export default function LoginPage() {
     >
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 mb-4">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "var(--brand-gradient)" }}
-            >
-              <BookOpen className="h-5 w-5 text-white" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">Área administrativa</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Faça login para gerenciar a documentação
-          </p>
+        <div className="flex justify-center mb-8">
+          <img src="/velo-logo.png" alt="Velo" style={{ height: 56, width: "auto" }} />
         </div>
+
+        <h1 className="text-xl font-bold text-foreground text-center mb-1">Área administrativa</h1>
+        <p className="text-sm text-muted-foreground text-center mb-6">
+          Faça login para gerenciar a documentação
+        </p>
 
         {/* Card */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -88,7 +79,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Botão com gradiente */}
             <button
               type="submit"
               disabled={loading}

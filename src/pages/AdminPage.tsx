@@ -16,6 +16,7 @@ import {
 import {
   Plus, Trash2, Edit, Upload, LogOut, BookOpen, FileText,
   FolderOpen, Eye, X, Tag, Sparkles, ChevronRight, ChevronDown,
+  Settings,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +24,7 @@ import { MarkdownEditor } from "@/components/docs/MarkdownEditor";
 import { AcademiaGeneratorButton } from "@/components/docs/AcademiaGeneratorButton";
 import { DiagnosticGeneratorButton } from "@/components/docs/DiagnosticGeneratorButton";
 import { geminiGenerateTags, geminiPageToMarkdown } from "@/lib/gemini";
+import { SettingsTab } from "@/components/admin/SettingsTab";
 
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
@@ -57,51 +59,32 @@ function TagInput({ tags, onChange, onAutoTag, loadingAutoTag }: {
   loadingAutoTag?: boolean;
 }) {
   const [input, setInput] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const addTag = (raw: string) => {
-    const tag = raw.trim().toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+  const addTag = (val: string) => {
+    const t = val.trim().toLowerCase();
+    if (t && !tags.includes(t)) onChange([...tags, t]);
     setInput("");
   };
-
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (["Enter", ",", " ", "Tab"].includes(e.key)) {
-      e.preventDefault();
-      if (input.trim()) addTag(input);
-    } else if (e.key === "Backspace" && !input && tags.length) {
-      onChange(tags.slice(0, -1));
-    }
+    if (["Enter", ",", " "].includes(e.key)) { e.preventDefault(); addTag(input); }
+    if (e.key === "Backspace" && !input && tags.length) onChange(tags.slice(0, -1));
   };
-
   return (
-    <div
-      className="min-h-[40px] flex flex-wrap gap-1.5 items-center px-3 py-2 border border-border rounded-md bg-background cursor-text"
-      onClick={() => inputRef.current?.focus()}
-    >
-      {tags.map((tag) => (
-        <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-          {tag}
-          <button type="button" onClick={(e) => { e.stopPropagation(); onChange(tags.filter((t) => t !== tag)); }} className="hover:text-destructive transition-colors">
-            <X className="h-3 w-3" />
-          </button>
+    <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-input bg-background min-h-[42px] focus-within:ring-1 focus-within:ring-ring">
+      {tags.map((t) => (
+        <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+          {t}
+          <button type="button" onClick={() => onChange(tags.filter((x) => x !== t))} className="hover:text-destructive transition-colors">×</button>
         </span>
       ))}
       <input
-        ref={inputRef}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKey}
-        onBlur={() => { if (input.trim()) addTag(input); }}
-        placeholder={tags.length === 0 ? "Digite uma tag e pressione Enter..." : ""}
-        className="flex-1 min-w-[120px] bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground"
+        value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKey}
+        placeholder={tags.length === 0 ? "Digite e pressione Enter..." : ""}
+        className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
       {onAutoTag && (
-        <button type="button" onClick={onAutoTag} disabled={loadingAutoTag} title="Gerar tags com IA"
-          className="ml-auto p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1 text-xs">
-          <Sparkles className="h-3.5 w-3.5" />
+        <button type="button" onClick={onAutoTag} disabled={loadingAutoTag}
+          className="ml-auto flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50">
+          <Sparkles className="h-3 w-3" />
           {loadingAutoTag ? "Gerando..." : "Auto-tag IA"}
         </button>
       )}
@@ -112,7 +95,7 @@ function TagInput({ tags, onChange, onAutoTag, loadingAutoTag }: {
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type DocModuleWithParent = DocModule & { parent_module_id?: string | null };
-type Tab = "modules" | "pages" | "import";
+type Tab = "modules" | "pages" | "import" | "settings";
 
 // ─── Loaders dinâmicos ────────────────────────────────────────────────────────
 
@@ -170,9 +153,11 @@ export default function AdminPage() {
   const [importContent, setImportContent] = useState("");
   const [importTitle, setImportTitle] = useState("");
   const [importTags, setImportTags] = useState<string[]>([]);
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_key") ?? localStorage.getItem("anthropic_key") ?? "");
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
+
+  // Lê a chave do localStorage (configurada na aba Configurações)
+  const geminiKey = localStorage.getItem("gemini_key") ?? localStorage.getItem("anthropic_key") ?? "";
 
   // ── Derivados ──────────────────────────────────────────────────────────────
 
@@ -208,7 +193,7 @@ export default function AdminPage() {
         setEditingPage((p) => ({ ...p, tags: [...new Set([...(p.tags || []), ...tags])] }));
         toast({ title: `✅ ${tags.length} tags geradas!` });
       } else {
-        toast({ title: "Sem API key", description: "Preencha a Chave da API Anthropic na aba Importar.", variant: "destructive" });
+        toast({ title: "Sem API key", description: "Configure a Chave da API Gemini em Configurações.", variant: "destructive" });
       }
     } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
     finally { setLoadingAutoTag(false); }
@@ -426,9 +411,10 @@ export default function AdminPage() {
   const openEditPage = (page: DocPage) => { setEditingPage({ ...page, tags: (page as any).tags || [] }); setPageEditor(true); };
 
   const sidebarTabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: "modules", label: "Módulos",  icon: <FolderOpen className="h-4 w-4" /> },
-    { key: "pages",   label: "Páginas",  icon: <FileText className="h-4 w-4" /> },
-    { key: "import",  label: "Importar", icon: <Upload className="h-4 w-4" /> },
+    { key: "modules",  label: "Módulos",       icon: <FolderOpen className="h-4 w-4" /> },
+    { key: "pages",    label: "Páginas",        icon: <FileText className="h-4 w-4" /> },
+    { key: "import",   label: "Importar",       icon: <Upload className="h-4 w-4" /> },
+    { key: "settings", label: "Configurações",  icon: <Settings className="h-4 w-4" /> },
   ];
 
   // ── Editor de página ───────────────────────────────────────────────────────
@@ -448,18 +434,18 @@ export default function AdminPage() {
             {editingPage.id ? `Editando: ${editingPage.title}` : "Nova página"}
           </span>
 
-          {/* ── Botão Diagnóstico IA ── */}
           <DiagnosticGeneratorButton
             pageId={editingPage.id ?? ""}
             pageTitle={editingPage.title ?? ""}
             pageContent={editingPage.content ?? ""}
+            hasContent={!!((editingPage as any).diagnostic_content?.steps?.length)}
           />
 
-          {/* ── Botão Academia IA ── */}
           <AcademiaGeneratorButton
             pageId={editingPage.id ?? ""}
             pageTitle={editingPage.title ?? ""}
             pageContent={editingPage.content ?? ""}
+            hasContent={!!((editingPage as any).academia_content?.steps?.length)}
           />
 
           <Button
@@ -528,18 +514,16 @@ export default function AdminPage() {
       {/* Sidebar */}
       <aside className="w-[220px] border-r border-border bg-muted/30 flex flex-col min-h-screen">
         <div className="p-4 border-b border-border">
-          <Link to="/" className="flex items-center gap-2 font-bold">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "var(--brand-gradient)" }}>
-              <BookOpen className="h-4 w-4 text-white" />
-            </div>
-            <span className="brand-text text-base" style={{ letterSpacing: "-0.02em" }}>Docs Admin</span>
+          <Link to="/" className="flex items-center">
+            <img src="/velo-logo.png" alt="Velo" style={{ height: 30, width: "auto" }} />
           </Link>
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {sidebarTabs.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${tab === t.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${tab === t.key
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
               {t.icon}{t.label}
             </button>
           ))}
@@ -581,32 +565,38 @@ export default function AdminPage() {
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Módulo pai</label>
                       <Select value={editingModule.parent_module_id || "none"} onValueChange={(v) => setEditingModule({ ...editingModule, parent_module_id: v === "none" ? null : v })}>
-                        <SelectTrigger><SelectValue placeholder="Nenhum (módulo raiz)" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Nenhum (raiz)" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">— Nenhum (módulo raiz)</SelectItem>
-                          {allModulesFlat.filter(({ mod }) => mod.id !== editingModule.id).map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
+                          <SelectItem value="none">Nenhum (raiz)</SelectItem>
+                          {allModulesFlat.map(({ mod, label }) => <SelectItem key={mod.id} value={mod.id}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Slug <span className="text-muted-foreground font-normal">(auto-gerado se vazio)</span></label>
-                      <Input placeholder="integracao-pdv" value={editingModule.slug || ""} onChange={(e) => setEditingModule({ ...editingModule, slug: e.target.value })} />
+                      <label className="block text-sm font-medium text-foreground mb-1.5">Ordem</label>
+                      <Input type="number" placeholder="0" value={editingModule.order_index ?? ""} onChange={(e) => setEditingModule({ ...editingModule, order_index: parseInt(e.target.value) || 0 })} />
                     </div>
-                    <Button onClick={handleSaveModule} className="w-full text-white border-0" style={{ background: "var(--brand-gradient)" }} disabled={!editingModule.title}>Salvar Módulo</Button>
+                    <Button onClick={handleSaveModule} className="w-full text-white border-0" style={{ background: "var(--brand-gradient)" }}
+                      disabled={!editingModule.title}>
+                      {editingModule.id ? "Salvar alterações" : "Criar módulo"}
+                    </Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
 
             {rootModules.length > 0 ? (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {rootModules.map((mod) => (
                   <ModuleTreeItem
-                    key={mod.id} mod={mod}
-                    subModules={subModulesOf(mod.id)} subModulesOf={subModulesOf}
-                    expanded={expandedModules} toggle={toggleModuleExpand}
-                    onEdit={(m) => { setEditingModule(m); setModuleDialog(true); }}
-                    onDelete={(m) => { if (confirm(`Excluir "${m.title}"? Todas as páginas serão apagadas.`)) deleteModule.mutate(m.id); }}
+                    key={mod.id}
+                    mod={mod}
+                    subModules={subModulesOf(mod.id)}
+                    subModulesOf={subModulesOf}
+                    expanded={expandedModules}
+                    toggle={toggleModuleExpand}
+                    onEdit={(m) => { setEditingModule({ ...m }); setModuleDialog(true); }}
+                    onDelete={(m) => { if (confirm(`Excluir "${m.title}"?`)) deleteModule.mutate(m.id); }}
                     depth={0}
                   />
                 ))}
@@ -614,7 +604,7 @@ export default function AdminPage() {
             ) : (
               <div className="border border-dashed border-border rounded-lg p-12 text-center">
                 <FolderOpen className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground">Nenhum módulo. Crie o primeiro!</p>
+                <p className="text-muted-foreground">Nenhum módulo ainda. Crie o primeiro!</p>
               </div>
             )}
           </div>
@@ -643,40 +633,33 @@ export default function AdminPage() {
 
             {filteredPages && filteredPages.length > 0 ? (
               <div className="border border-border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 border-b border-border">
-                    <tr>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Título</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Módulo</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Slug</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Tags</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Ações</th>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Título</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulo</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
+                      <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredPages.map((page) => (
                       <tr key={page.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 font-medium text-foreground">
-                          <div className="flex items-center gap-2">
-                            {page.parent_page_id && <span className="text-muted-foreground/50 text-xs">↳</span>}
-                            {page.title}
-                            {(page as any).academia_content && (
-                              <span title="Academia gerada" className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white" style={{ background: "var(--brand-gradient)" }}>🎓</span>
-                            )}
+                        <td className="px-5 py-3">
+                          <div>
+                            <p className="font-medium text-sm text-foreground">{page.title}</p>
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{getModuleSlug(page.module_id)}/{page.slug}</p>
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-muted-foreground">
-                          <Link to={`/docs/${getModuleSlug(page.module_id)}/${page.slug}`} target="_blank" className="hover:text-primary transition-colors flex items-center gap-1">
-                            {getModuleName(page.module_id)} <Eye className="h-3 w-3 opacity-50" />
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{page.slug}</td>
+                        <td className="px-5 py-3 text-sm text-muted-foreground">{getModuleName(page.module_id)}</td>
                         <td className="px-5 py-3">
                           <div className="flex flex-wrap gap-1">
                             {((page as any).tags || []).slice(0, 3).map((t: string) => (
-                              <span key={t} className="px-1.5 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-medium">{t}</span>
+                              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{t}</span>
                             ))}
-                            {((page as any).tags || []).length > 3 && <span className="text-[10px] text-muted-foreground">+{(page as any).tags.length - 3}</span>}
+                            {((page as any).tags || []).length > 3 && (
+                              <span className="text-[10px] text-muted-foreground">+{((page as any).tags || []).length - 3}</span>
+                            )}
                             {(!(page as any).tags || (page as any).tags.length === 0) && <span className="text-[10px] text-muted-foreground/50 italic">sem tags</span>}
                           </div>
                         </td>
@@ -707,6 +690,8 @@ export default function AdminPage() {
               <h1 className="text-2xl font-bold text-foreground">Importar conteúdo</h1>
               <p className="text-sm text-muted-foreground mt-1">Imagens e tags geradas automaticamente em qualquer formato.</p>
             </div>
+
+            {/* Banner Notion */}
             <div className="rounded-lg p-5" style={{ border: "1px solid rgba(91,33,182,0.3)", background: "linear-gradient(135deg, rgba(91,33,182,0.05) 0%, rgba(255,107,0,0.04) 100%)" }}>
               <p className="text-sm font-semibold mb-2 brand-text">✦ Importação recomendada: Notion → ZIP</p>
               <p className="text-sm text-muted-foreground mb-3">Exporte como <strong className="text-foreground">Markdown &amp; CSV</strong> e importe o <code className="text-xs bg-muted px-1 py-0.5 rounded">.zip</code> — imagens e tags geradas automaticamente.</p>
@@ -716,18 +701,23 @@ export default function AdminPage() {
               </ol>
             </div>
 
-            <div className="rounded-lg border border-border p-5 space-y-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-1">🔑 Chave da API Gemini <span className="font-normal text-muted-foreground">(PDF + auto-tag + Academia — <a href="https://aistudio.google.com" target="_blank" className="underline">grátis aqui</a>)</span></p>
-                <p className="text-xs text-muted-foreground mb-2">Usada localmente. Nunca enviada a servidores externos além do Google.</p>
-                <Input
-                  type="password"
-                  placeholder="AIza..."
-                  value={geminiKey}
-                  onChange={(e) => { setGeminiKey(e.target.value); localStorage.setItem("gemini_key", e.target.value); }}
-                />
+            {/* Aviso de chave não configurada */}
+            {!geminiKey && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-5 py-4 flex items-start gap-3">
+                <span className="text-lg mt-0.5">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Chave da API Gemini não configurada</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Sem ela, PDF, auto-tag e Academia IA não funcionam.{" "}
+                    <button onClick={() => setTab("settings")} className="underline text-primary hover:opacity-80">
+                      Configurar agora →
+                    </button>
+                  </p>
+                </div>
               </div>
+            )}
 
+            <div className="rounded-lg border border-border p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Módulo de destino *</label>
                 <Select value={importModuleId} onValueChange={setImportModuleId}>
@@ -772,6 +762,10 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* ── CONFIGURAÇÕES ── */}
+        {tab === "settings" && <SettingsTab />}
+
       </main>
     </div>
   );
@@ -798,26 +792,29 @@ function ModuleTreeItem({
     <div className={depth > 0 ? "ml-4 border-l border-border/40 pl-3" : ""}>
       <div className="border border-border rounded-lg p-3 flex items-center gap-3 bg-background hover:bg-muted/10 transition-colors mb-1 group">
         {hasChildren ? (
-          <button onClick={() => toggle(mod.id)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
+          <button onClick={() => toggle(mod.id)} className="text-muted-foreground hover:text-foreground transition-colors">
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
-          <div className="w-6 h-6" />
+          <div className="w-4" />
         )}
+        <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{mod.title}</p>
           {mod.description && <p className="text-xs text-muted-foreground truncate">{mod.description}</p>}
         </div>
-        <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded hidden sm:inline">{mod.slug}</span>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(mod)}><Edit className="h-3.5 w-3.5" /></Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(mod)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(mod)}><Edit className="h-3.5 w-3.5" /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(mod)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+        </div>
       </div>
       {isExpanded && hasChildren && (
-        <div className="mt-1">
+        <div className="space-y-1">
           {subModules.map((sub) => (
             <ModuleTreeItem
               key={sub.id} mod={sub}
-              subModules={subModulesOf(sub.id)} subModulesOf={subModulesOf}
+              subModules={subModulesOf(sub.id)}
+              subModulesOf={subModulesOf}
               expanded={expanded} toggle={toggle}
               onEdit={onEdit} onDelete={onDelete}
               depth={depth + 1}
