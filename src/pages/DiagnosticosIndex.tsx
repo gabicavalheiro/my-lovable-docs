@@ -1,22 +1,19 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { DocsLayout } from "@/components/docs/DocsLayout";
-import { useAcademiaPages, useModules } from "@/hooks/useDocData";
-import { GraduationCap, Search, BookOpen, ChevronRight } from "lucide-react";
+import { useDiagnosticPages, useModules } from "@/hooks/useDocData";
+import { GitBranch, Search, BookOpen, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export default function AcademiaIndex() {
-  const { data: pages }   = useAcademiaPages(); // staleTime:0, busca só as com academia
+export default function DiagnosticosIndex() {
+  const { data: pages }   = useDiagnosticPages(); // staleTime:0, busca só as com diagnostic
   const { data: modules } = useModules();
   const [search, setSearch] = useState("");
 
   const moduleMap = useMemo(() => new Map((modules ?? []).map((m) => [m.id, m])), [modules]);
 
-  const totalQuestions = useMemo(() => {
-    return (pages ?? []).reduce((acc, p) => {
-      const steps = (p as any).academia_content?.steps ?? [];
-      return acc + steps.filter((s: any) => s.type === "quiz").length;
-    }, 0);
+  const totalSteps = useMemo(() => {
+    return (pages ?? []).reduce((acc, p) => acc + ((p as any).diagnostic_content?.steps?.length ?? 0), 0);
   }, [pages]);
 
   const grouped = useMemo(() => {
@@ -46,24 +43,24 @@ export default function AcademiaIndex() {
         <div className="max-w-[900px] mx-auto px-8 py-10">
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl" style={{ background: "linear-gradient(135deg, #5b21b6 0%, #ff6b00 100%)" }}>
-                <GraduationCap className="h-6 w-6 text-white" />
+              <div className="p-2.5 rounded-xl" style={{ background: "var(--brand-gradient)" }}>
+                <GitBranch className="h-6 w-6 text-white" />
               </div>
               <h1 className="text-3xl font-extrabold"
-                style={{ background: "linear-gradient(135deg, #5b21b6 0%, #ff6b00 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                Academia
+                style={{ background: "var(--brand-gradient)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                Diagnósticos
               </h1>
             </div>
-            <p className="text-muted-foreground text-lg mb-5">Teste seus conhecimentos sobre cada módulo da documentação.</p>
+            <p className="text-muted-foreground text-lg mb-5">Identifique sua dúvida e siga o caminho certo para resolvê-la.</p>
             {(pages?.length ?? 0) > 0 && (
               <div className="flex gap-4 flex-wrap">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-4 py-2">
-                  <GraduationCap className="h-4 w-4 text-violet-500" />
-                  <span><strong className="text-foreground">{pages?.length}</strong> tópicos disponíveis</span>
+                  <GitBranch className="h-4 w-4 text-violet-500" />
+                  <span><strong className="text-foreground">{pages?.length}</strong> fluxos disponíveis</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-4 py-2">
                   <BookOpen className="h-4 w-4 text-orange-500" />
-                  <span><strong className="text-foreground">{totalQuestions}</strong> perguntas no total</span>
+                  <span><strong className="text-foreground">{totalSteps}</strong> passos no total</span>
                 </div>
               </div>
             )}
@@ -71,10 +68,10 @@ export default function AcademiaIndex() {
 
           {(pages?.length ?? 0) === 0 ? (
             <div className="text-center py-24 border border-dashed border-border rounded-xl">
-              <GraduationCap className="h-14 w-14 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-lg font-medium text-foreground mb-2">Nenhuma Academia gerada ainda</p>
+              <GitBranch className="h-14 w-14 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-lg font-medium text-foreground mb-2">Nenhum Diagnóstico gerado ainda</p>
               <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                Acesse o painel Admin, abra uma página e clique em <strong>✨ Gerar Academia IA</strong>.
+                Acesse o painel Admin, abra uma página e clique em <strong>🔍 Gerar Diagnóstico IA</strong>.
               </p>
             </div>
           ) : (
@@ -94,22 +91,21 @@ export default function AcademiaIndex() {
                     return (
                       <section key={modId}>
                         <div className="flex items-center gap-2 mb-3">
-                          <div className="p-1.5 rounded-md bg-primary/10"><BookOpen className="h-4 w-4 text-primary" /></div>
+                          <div className="p-1.5 rounded-md bg-violet-500/10"><BookOpen className="h-4 w-4 text-violet-600" /></div>
                           <h2 className="text-base font-semibold text-foreground">{mod.title}</h2>
-                          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{ps!.length} tópico{ps!.length !== 1 ? "s" : ""}</span>
+                          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{ps!.length} fluxo{ps!.length !== 1 ? "s" : ""}</span>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-3">
                           {ps!.map((page) => {
-                            const steps  = (page as any).academia_content?.steps ?? [];
-                            const qCount = steps.filter((s: any) => s.type === "quiz").length;
+                            const steps = (page as any).diagnostic_content?.steps ?? [];
                             return (
-                              <Link key={page.id} to={`/docs/${mod.slug}/${page.slug}?tab=academia`}
+                              <Link key={page.id} to={`/docs/${mod.slug}/${page.slug}?tab=diagnostic`}
                                 className="group border border-border rounded-xl p-5 hover:border-violet-300 hover:shadow-md transition-all bg-background">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-foreground group-hover:text-violet-700 transition-colors truncate">{page.title}</p>
                                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                      <GraduationCap className="h-3 w-3" />{qCount} pergunta{qCount !== 1 ? "s" : ""}
+                                      <GitBranch className="h-3 w-3" />{steps.length} passo{steps.length !== 1 ? "s" : ""} no fluxo
                                     </p>
                                   </div>
                                   <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-violet-500 transition-colors flex-shrink-0 mt-0.5" />

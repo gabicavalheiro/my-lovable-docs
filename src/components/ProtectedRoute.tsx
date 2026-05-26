@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
 
   if (loading) {
     return (
@@ -13,7 +13,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user) return <Navigate to="/_olev-9f3k2" replace />;
+  // Redireciona para 404 — não revela que existe rota de login ou admin
+  if (!user || !isAdmin) return <Navigate to="/404" replace />;
 
   return <>{children}</>;
 }
