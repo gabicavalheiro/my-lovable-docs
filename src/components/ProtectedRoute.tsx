@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -13,8 +13,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  // Redireciona para 404 — não revela que existe rota de login ou admin
-  if (!user || !isAdmin) return <Navigate to="/404" replace />;
+  // Não autenticado → redireciona para login (sem revelar o path do admin)
+  if (!user) return <Navigate to="/_olev-9f3k2" replace />;
 
   return <>{children}</>;
 }

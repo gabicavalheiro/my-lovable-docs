@@ -13,16 +13,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/* ── Verifica se o e-mail autenticado está na whitelist admin_users ─── */
-async function checkIsAdmin(email: string | undefined): Promise<boolean> {
-  if (!email) return false;
-  const { data, error } = await supabase
-    .from("admin_users" as any)
-    .select("email")
-    .eq("email", email)
-    .maybeSingle();
-  if (error) return false;
-  return Boolean(data);
+async function checkIsAdmin(email: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("admin_users" as any)
+      .select("email")
+      .eq("email", email)
+      .maybeSingle();
+    return Boolean(data);
+  } catch {
+    return false;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -31,30 +32,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const refreshAdmin = async (u: User | null) => {
-    if (!u) { setIsAdmin(false); return; }
-    const ok = await checkIsAdmin(u.email);
-    setIsAdmin(ok);
-    // Usuário autenticado mas não admin: faz signOut silencioso
-    if (!ok) await supabase.auth.signOut();
-  };
-
   useEffect(() => {
+    // Usa APENAS onAuthStateChange — já emite o estado inicial (INITIAL_SESSION).
+    // Chamar getSession() em paralelo causa lock contention no auth token,
+    // travando todas as chamadas subsequentes ao banco.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        await refreshAdmin(session?.user ?? null);
         setLoading(false);
+
+        // Checa admin em background sem bloquear o fluxo principal
+        if (session?.user?.email) {
+          checkIsAdmin(session.user.email).then(setIsAdmin);
+        } else {
+          setIsAdmin(false);
+        }
       }
     );
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      await refreshAdmin(session?.user ?? null);
-      setLoading(false);
-    });
 
     return () => subscription.unsubscribe();
   }, []);
@@ -62,7 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    // refreshAdmin é chamado pelo onAuthStateChange automaticamente
   };
 
   const signOut = async () => {

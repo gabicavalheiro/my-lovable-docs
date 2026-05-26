@@ -1,7 +1,7 @@
 import { Link, useParams, useLocation } from "react-router-dom";
 import { ChevronDown, ChevronRight, FolderOpen, GraduationCap, GitBranch } from "lucide-react";
 import { useState, useMemo } from "react";
-import { useModules, useAllPagesSidebar, type DocModule } from "@/hooks/useDocData";
+import { useModules, useAllPages, type DocModule, type DocPage } from "@/hooks/useDocData";
 import { cn } from "@/lib/utils";
 
 type SidebarPage = { id: string; module_id: string; parent_page_id: string | null; title: string; slug: string; order_index: number; };
@@ -37,7 +37,7 @@ function DiagnosticosLink() {
 export function DocSidebar() {
   const { moduleSlug, pageSlug } = useParams();
   const { data: modules }        = useModules();
-  const { data: allPages }       = useAllPagesSidebar(); // payload mínimo
+  const { data: allPages }       = useAllPages(); // payload mínimo
   const [expanded, setExpanded]  = useState<Record<string, boolean>>({});
 
   const pagesByModule = useMemo(() => {

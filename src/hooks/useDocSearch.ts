@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAllPagesSearch, useModules } from "@/hooks/useDocData";
+import { useAllPages, useModules } from "@/hooks/useDocData";
 import { headingToId, stripMarkdownInline, nearestHeadingId } from "@/lib/heading-utils";
 
 export type ExcerptHit = { text: string; anchor: string | null; };
@@ -31,7 +31,7 @@ function extractHits(content: string, q: string): ExcerptHit[] {
 }
 
 export function useDocSearch(query: string): SearchResult[] {
-  const { data: allPages } = useAllPagesSearch(); // sem JSONB de IA
+  const { data: allPages } = useAllPages(); // sem JSONB de IA
   const { data: modules }  = useModules();
 
   return useMemo(() => {
