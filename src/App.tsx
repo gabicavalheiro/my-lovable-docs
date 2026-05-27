@@ -8,14 +8,18 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const Index             = lazy(() => import("./pages/Index"));
-const DocsIndex         = lazy(() => import("./pages/DocsIndex"));
-const DocsPage          = lazy(() => import("./pages/DocsPage"));
-const AcademiaIndex     = lazy(() => import("./pages/AcademiaIndex"));
+// Adicione os lazy imports junto com os outros:
+const DesempenhoPage = lazy(() => import("./pages/DesempenhoPage"));
+const ClienteLoginPage = lazy(() => import("./pages/ClienteLoginPage"));
+const ClienteSignupPage = lazy(() => import("./pages/ClienteSignupPage"));
+const Index = lazy(() => import("./pages/Index"));
+const DocsIndex = lazy(() => import("./pages/DocsIndex"));
+const DocsPage = lazy(() => import("./pages/DocsPage"));
+const AcademiaIndex = lazy(() => import("./pages/AcademiaIndex"));
 const DiagnosticosIndex = lazy(() => import("./pages/DiagnosticosIndex"));
-const AdminPage         = lazy(() => import("./pages/AdminPage"));
-const LoginPage         = lazy(() => import("./pages/LoginPage"));
-const NotFound          = lazy(() => import("./pages/NotFound"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
   return (
@@ -40,14 +44,18 @@ const App = () => (
         <AuthProvider>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/"                           element={<Index />} />
-              <Route path="/docs"                       element={<DocsIndex />} />
+              <Route path="/" element={<Index />} />
+              <Route path="/docs" element={<DocsIndex />} />
               <Route path="/docs/:moduleSlug/:pageSlug" element={<DocsPage />} />
-              <Route path="/academia"                   element={<AcademiaIndex />} />
-              <Route path="/diagnosticos"               element={<DiagnosticosIndex />} />
-              <Route path="/_olev-9f3k2"                element={<LoginPage />} />
-              <Route path="/admin"                      element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-              <Route path="*"                           element={<NotFound />} />
+              <Route path="/academia" element={<AcademiaIndex />} />
+              <Route path="/diagnosticos" element={<DiagnosticosIndex />} />
+              <Route path="/_olev-9f3k2" element={<LoginPage />} />
+              <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+              <Route path="/login" element={<ClienteLoginPage />} />
+              <Route path="/signup" element={<ClienteSignupPage />} />
+              <Route path="/desempenho" element={<DesempenhoPage />} />
+
             </Routes>
           </Suspense>
         </AuthProvider>

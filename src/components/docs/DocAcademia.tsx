@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { salvarAtividade } from "@/hooks/useSalvarAtividade";
 
 interface AcademiaOption { id: string; text: string; isCorrect: boolean; feedback: string; nextStepId: string; }
 interface AcademiaStep  { id: string; type: "intro" | "quiz" | "end"; content: string; badge?: { type: "warning" | "tip"; text: string }; options?: AcademiaOption[]; nextStepId?: string; }
@@ -56,7 +57,8 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
   const [score, setScore]               = useState({ correct: 0, total: 0 });
   const [answered, setAnswered]         = useState<Record<string, boolean>>({});
   const [animKey, setAnimKey]           = useState(0);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef  = useRef<HTMLDivElement>(null);
+  const startRef = useRef<number>(Date.now());
 
   const current   = steps.find(s => s.id === currentId) ?? steps[0];
   const progress  = getProgress(steps, currentId);
@@ -78,14 +80,33 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
   }, [showFeedback, currentId, answered]);
 
   const reset = useCallback(() => {
-    setCurrentId(steps[0]?.id ?? "intro"); setSelected(null);
-    setShowFeedback(false); setScore({ correct: 0, total: 0 });
-    setAnswered({}); setAnimKey(k => k + 1);
+    startRef.current = Date.now();
+    setCurrentId(steps[0]?.id ?? "intro");
+    setSelected(null);
+    setShowFeedback(false);
+    setScore({ correct: 0, total: 0 });
+    setAnswered({});
+    setAnimKey(k => k + 1);
   }, [steps]);
 
   const pct   = quizTotal > 0 ? Math.round((score.correct / quizTotal) * 100) : 0;
   const emoji = pct >= 80 ? "🏆" : pct >= 60 ? "👍" : "📚";
   const label = pct >= 80 ? "Excelente domínio!" : pct >= 60 ? "Bom progresso!" : "Continue praticando!";
+
+  // Salva quando chega na tela final
+  useEffect(() => {
+    if (current.type !== "end") return;
+    const duracao_seg = Math.round((Date.now() - startRef.current) / 1000);
+    salvarAtividade({
+      tipo:        "academia",
+      page_id:     data.title,
+      page_title:  data.title,
+      score_pct:   pct,
+      acertos:     score.correct,
+      total:       quizTotal,
+      duracao_seg,
+    });
+  }, [current.type]); // eslint-disable-line
 
   return (
     <div ref={cardRef}>
@@ -114,7 +135,6 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
               </h2>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.82rem", margin: "4px 0 0", fontWeight: 500 }}>{data.subtitle}</p>
             </div>
-            {/* Contador */}
             {current.type === "quiz" && (
               <div style={{ flexShrink: 0, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 10px", fontSize: "0.78rem", fontWeight: 700, color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap" }}>
                 {quizIndex} / {quizTotal}
@@ -155,7 +175,6 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
                 ))}
               </div>
 
-              {/* Feedback */}
               {showFeedback && selected && (
                 <div style={{
                   background: selected.isCorrect ? "rgba(34,197,94,0.10)" : "rgba(239,68,68,0.10)",
@@ -170,7 +189,6 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
                 </div>
               )}
 
-              {/* Badge */}
               {current.badge && (
                 <div style={{
                   background: current.badge.type === "warning" ? "rgba(239,68,68,0.08)" : "rgba(91,33,182,0.08)",
@@ -182,7 +200,6 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
                 </div>
               )}
 
-              {/* Próxima */}
               {showFeedback && selected && (
                 <button onClick={() => go(selected.nextStepId)}
                   style={{ background: G, color: "#fff", border: "none", borderRadius: 12, padding: "12px 28px", fontWeight: 700, fontSize: "0.93rem", cursor: "pointer", width: "100%", boxShadow: "0 4px 16px rgba(91,33,182,0.35)" }}>
@@ -220,7 +237,7 @@ export function DocAcademia({ data }: { data: AcademiaData }) {
         {current.type === "quiz" && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "10px 28px", display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ display: "flex", gap: 5, flex: 1 }}>
-              {steps.filter(s => s.type === "quiz").map((s, i) => (
+              {steps.filter(s => s.type === "quiz").map((s) => (
                 <div key={s.id} style={{
                   height: 4, flex: 1, borderRadius: 4,
                   background: answered[s.id]
