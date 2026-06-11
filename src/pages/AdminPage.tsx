@@ -14,9 +14,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Edit, Upload, LogOut, BookOpen, FileText,
+  Plus, Trash2, Edit, Upload, LogOut, FileText,
   FolderOpen, Eye, X, Tag, Sparkles, ChevronRight, ChevronDown,
-  Settings,
+  Settings, Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +25,7 @@ import { AcademiaGeneratorButton } from "@/components/docs/AcademiaGeneratorButt
 import { DiagnosticGeneratorButton } from "@/components/docs/DiagnosticGeneratorButton";
 import { geminiGenerateTags, geminiPageToMarkdown } from "@/lib/gemini";
 import { SettingsTab } from "@/components/admin/SettingsTab";
+import { RevendasTab } from "@/components/admin/RevendasTab";
 
 // ─── Utilitários ─────────────────────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ function TagInput({ tags, onChange, onAutoTag, loadingAutoTag }: {
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type DocModuleWithParent = DocModule & { parent_module_id?: string | null };
-type Tab = "modules" | "pages" | "import" | "settings";
+type Tab = "modules" | "pages" | "import" | "revendas" | "settings";
 
 // ─── Loaders dinâmicos ────────────────────────────────────────────────────────
 
@@ -414,6 +415,7 @@ export default function AdminPage() {
     { key: "modules",  label: "Módulos",       icon: <FolderOpen className="h-4 w-4" /> },
     { key: "pages",    label: "Páginas",        icon: <FileText className="h-4 w-4" /> },
     { key: "import",   label: "Importar",       icon: <Upload className="h-4 w-4" /> },
+    { key: "revendas", label: "Revendas",       icon: <Users className="h-4 w-4" /> },
     { key: "settings", label: "Configurações",  icon: <Settings className="h-4 w-4" /> },
   ];
 
@@ -633,29 +635,30 @@ export default function AdminPage() {
 
             {filteredPages && filteredPages.length > 0 ? (
               <div className="border border-border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Título</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulo</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
-                      <th className="px-5 py-3"></th>
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b border-border">
+                    <tr>
+                      <th className="text-left px-5 py-3 font-medium text-muted-foreground">Título</th>
+                      <th className="text-left px-5 py-3 font-medium text-muted-foreground">Módulo</th>
+                      <th className="text-left px-5 py-3 font-medium text-muted-foreground">Tags</th>
+                      <th className="px-5 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredPages.map((page) => (
                       <tr key={page.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-5 py-3">
-                          <div>
-                            <p className="font-medium text-sm text-foreground">{page.title}</p>
-                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{getModuleSlug(page.module_id)}/{page.slug}</p>
-                          </div>
+                          <div className="font-medium text-foreground truncate max-w-[260px]">{page.title}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{page.slug}</div>
                         </td>
-                        <td className="px-5 py-3 text-sm text-muted-foreground">{getModuleName(page.module_id)}</td>
+                        <td className="px-5 py-3 text-muted-foreground">
+                          <a href={`/docs/${getModuleSlug(page.module_id)}/${page.slug}`} target="_blank" rel="noreferrer"
+                            className="hover:text-foreground transition-colors">{getModuleName(page.module_id)}</a>
+                        </td>
                         <td className="px-5 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {((page as any).tags || []).slice(0, 3).map((t: string) => (
-                              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{t}</span>
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {((page as any).tags || []).slice(0, 3).map((tag: string) => (
+                              <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
                             ))}
                             {((page as any).tags || []).length > 3 && (
                               <span className="text-[10px] text-muted-foreground">+{((page as any).tags || []).length - 3}</span>
@@ -762,6 +765,9 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* ── REVENDAS ── */}
+        {tab === "revendas" && <RevendasTab />}
 
         {/* ── CONFIGURAÇÕES ── */}
         {tab === "settings" && <SettingsTab />}
